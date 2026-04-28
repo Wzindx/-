@@ -78,12 +78,26 @@ jobs:
           echo "${PIPESTATUS[0]}" > build-release-exit-code.txt
           exit 0
 
+      - name: Collect APK outputs
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p dist-debug dist-release
+          find app/build/outputs -type f -iname '*debug*.apk' -exec cp {} dist-debug/ \; 2>/dev/null || true
+          find app/build/outputs -type f -iname '*release*.apk' -exec cp {} dist-release/ \; 2>/dev/null || true
+          echo "All APK outputs:"
+          find app/build/outputs -type f -iname '*.apk' -print 2>/dev/null || true
+          echo "Debug artifacts:"
+          find dist-debug -type f -print || true
+          echo "Release artifacts:"
+          find dist-release -type f -print || true
+
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: universal-image-studio-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: dist-debug/*.apk
           if-no-files-found: ignore
 
       - name: Upload Release APK
@@ -91,7 +105,7 @@ jobs:
         if: always()
         with:
           name: universal-image-studio-release-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: dist-release/*.apk
           if-no-files-found: ignore
 
       - name: Upload Build Logs
@@ -116,12 +130,12 @@ jobs:
           cp build-release.log build-report/build-release.log || true
           cp build-release-exit-code.txt build-report/build-release-exit-code.txt || true
 
-          if ls app/build/outputs/apk/debug/*.apk >/dev/null 2>&1; then
-            echo 0 > build-report/build-exit-code.txt
-            echo "Debug APK build succeeded." > build-report/summary.txt
-          elif ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+          if find dist-release -type f -iname '*.apk' -print -quit | grep -q .; then
             echo 0 > build-report/build-exit-code.txt
             echo "Release APK build succeeded." > build-report/summary.txt
+          elif find dist-debug -type f -iname '*.apk' -print -quit | grep -q .; then
+            echo 0 > build-report/build-exit-code.txt
+            echo "Debug APK build succeeded; release APK missing." > build-report/summary.txt
           else
             echo 1 > build-report/build-exit-code.txt
             echo "APK build failed. Check build-debug.log and build-release.log." > build-report/summary.txt
@@ -138,10 +152,11 @@ jobs:
       - name: Validate APK Exists
         shell: bash
         run: |
-          if ls app/build/outputs/apk/debug/*.apk >/dev/null 2>&1; then
-            echo "Debug APK build succeeded."
-          elif ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+          if find dist-release -type f -iname '*.apk' -print -quit | grep -q .; then
             echo "Release APK build succeeded."
+          elif find dist-debug -type f -iname '*.apk' -print -quit | grep -q .; then
+            echo "Debug APK build succeeded, but release APK is missing."
+            exit 1
           else
             echo "APK build failed. Download build-logs artifact for details."
             exit 1
