@@ -6,6 +6,15 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to publish to, e.g. v1.1"
+        required: false
+        type: string
+      version_name:
+        description: "Optional version name override, e.g. 1.1"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -32,18 +41,32 @@ jobs:
           path: dist
           if_no_artifact_found: fail
 
-      - name: Set version variables
+      - name: Resolve release variables
         shell: bash
         run: |
-          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)
-          if [ -z "$VERSION_NAME" ]; then
+          GRADLE_VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)
+          if [ -z "$GRADLE_VERSION_NAME" ]; then
             echo "Failed to read versionName from app/build.gradle.kts"
             exit 1
           fi
-          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
-          echo "TAG_NAME=v$VERSION_NAME" >> $GITHUB_ENV
 
-      - name: Fallback build APK for manual dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
+            TAG_NAME="${{ inputs.tag_name }}"
+          else
+            TAG_NAME="v$GRADLE_VERSION_NAME"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version_name }}" ]; then
+            VERSION_NAME="${{ inputs.version_name }}"
+          else
+            VERSION_NAME="${TAG_NAME#v}"
+          fi
+
+          echo "GRADLE_VERSION_NAME=$GRADLE_VERSION_NAME" >> $GITHUB_ENV
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+
+      - name: Set up Java
         if: github.event_name == 'workflow_dispatch'
         uses: actions/setup-java@v4
         with:
@@ -60,9 +83,23 @@ jobs:
         with:
           gradle-version: '8.6'
 
+      - name: Decode signing keystore
+        if: github.event_name == 'workflow_dispatch' && env.ANDROID_KEYSTORE_BASE64 != ''
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > signing-keystore.jks
+          echo "ANDROID_KEYSTORE_PATH=$PWD/signing-keystore.jks" >> $GITHUB_ENV
+
       - name: Build Debug APK for manual dispatch
         if: github.event_name == 'workflow_dispatch'
         shell: bash
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ env.ANDROID_KEYSTORE_PATH }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           gradle assembleDebug --no-daemon --stacktrace
           mkdir -p dist
@@ -80,15 +117,20 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           name: UniversalImageStudio ${{ env.TAG_NAME }}
           body: |
-            Automated release for UniversalImageStudio.
+            ## 更新内容
 
-            - Version: ${{ env.VERSION_NAME }}
-            - Branch: main
+            - 独立版本发布到 `${{ env.TAG_NAME }}`，不再覆盖旧版本 Release
+            - 修复 UI 重构后的 Kotlin / Compose 构建问题
+            - 扩充图像模型选项
+            - 扩充 1K / 2K / 4K 画布尺寸与比例说明
+            - 更新应用图标与界面布局
+            - 预留固定签名配置入口，便于后续保持安装签名一致
+
+            ### 版本信息
+            - Release Tag: `${{ env.TAG_NAME }}`
+            - Version Name: `${{ env.VERSION_NAME }}`
+            - Gradle Version Name: `${{ env.GRADLE_VERSION_NAME }}`
             - Artifact: debug APK
-
-            Notes:
-            - Built successfully by GitHub Actions
-            - APK is attached below
           files: dist/*.apk
           draft: false
           prerelease: false
