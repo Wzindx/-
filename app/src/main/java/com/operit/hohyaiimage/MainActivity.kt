@@ -191,10 +191,10 @@ fun MainScreen() {
     var outputFormat by rememberSaveable { mutableStateOf("png") }
     var background by rememberSaveable { mutableStateOf("auto") }
     var editMode by rememberSaveable { mutableStateOf(false) }
-    var selectedImage by remember { mutableStateOf<Uri?>() }
+    var selectedImage by remember { mutableStateOf(null as Uri?) }
     var isLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
-    var imageBytes by remember { mutableStateOf<ByteArray?>() }
+    var imageBytes by remember { mutableStateOf(null as ByteArray?) }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
 
     val currentSizes = if (editMode) editSizes else generationSizes
