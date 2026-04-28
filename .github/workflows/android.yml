@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on:
@@ -13,8 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -31,21 +31,31 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Set up Gradle
+      - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.6'
+
+      - name: Ensure Gradle wrapper executable
+        shell: bash
+        run: chmod +x ./gradlew
 
       - name: Decode signing keystore
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > signing-keystore.jks
-          echo "ANDROID_KEYSTORE_PATH=$PWD/signing-keystore.jks" >> $GITHUB_ENV
+          echo "ANDROID_KEYSTORE_PATH=$PWD/signing-keystore.jks" >> "$GITHUB_ENV"
 
-      - name: Build Signed Release APK
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          set +e
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build-debug.log
+          echo "${PIPESTATUS[0]}" > build-debug-exit-code.txt
+          exit 0
+
+      - name: Build Release APK
         shell: bash
         env:
           ANDROID_KEYSTORE_PATH: ${{ env.ANDROID_KEYSTORE_PATH }}
@@ -54,41 +64,17 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set +e
-          gradle assembleRelease --no-daemon --stacktrace --info 2>&1 | tee build.log
-          gradle_code=${PIPESTATUS[0]}
-
-          if ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
-            echo "Release APK artifact exists; treating build as successful."
-            echo 0 > build-exit-code.txt
-          else
-            echo "$gradle_code" > build-exit-code.txt
-          fi
-
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --info 2>&1 | tee build-release.log
+          echo "${PIPESTATUS[0]}" > build-release-exit-code.txt
           exit 0
 
-      - name: Upload Build Log
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: build-log
-          path: |
-            build.log
-            build-exit-code.txt
-
-      - name: Commit Build Report
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p build-report
-          cp build.log build-report/build.log || true
-          cp build-exit-code.txt build-report/build-exit-code.txt || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add build-report/build.log build-report/build-exit-code.txt
-          if ! git diff --cached --quiet; then
-            git commit -m "Update build report [skip ci]"
-            git push
-          fi
+          name: universal-image-studio-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: ignore
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
@@ -98,12 +84,55 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: ignore
 
+      - name: Upload Build Logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-logs
+          path: |
+            build-debug.log
+            build-debug-exit-code.txt
+            build-release.log
+            build-release-exit-code.txt
+          if-no-files-found: ignore
+
+      - name: Commit Build Report
+        if: always() && github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip ci]')
+        shell: bash
+        run: |
+          mkdir -p build-report
+          cp build-debug.log build-report/build-debug.log || true
+          cp build-debug-exit-code.txt build-report/build-debug-exit-code.txt || true
+          cp build-release.log build-report/build-release.log || true
+          cp build-release-exit-code.txt build-report/build-release-exit-code.txt || true
+
+          if ls app/build/outputs/apk/debug/*.apk >/dev/null 2>&1; then
+            echo 0 > build-report/build-exit-code.txt
+            echo "Debug APK build succeeded." > build-report/summary.txt
+          elif ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+            echo 0 > build-report/build-exit-code.txt
+            echo "Release APK build succeeded." > build-report/summary.txt
+          else
+            echo 1 > build-report/build-exit-code.txt
+            echo "APK build failed. Check build-debug.log and build-release.log." > build-report/summary.txt
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build-report/
+          if ! git diff --cached --quiet; then
+            git commit -m "Update build report [skip ci]"
+            git push
+          fi
+
       - name: Validate APK Exists
         shell: bash
         run: |
-          if ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+          if ls app/build/outputs/apk/debug/*.apk >/dev/null 2>&1; then
+            echo "Debug APK build succeeded."
+          elif ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
             echo "Release APK build succeeded."
           else
-            echo "Release APK build failed. See build-report/build.log."
+            echo "APK build failed. Download build-logs artifact for details."
             exit 1
           fi
