@@ -1,0 +1,69 @@
+name: Cleanup Failed Workflow Runs
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list failed runs without deleting"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Cleanup failed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Repository: $REPO"
+          echo "Dry run: $DRY_RUN"
+
+          page=1
+          deleted=0
+          listed=0
+
+          while true; do
+            response="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/$REPO/actions/runs?status=failure&per_page=100&page=$page")"
+
+            count="$(echo "$response" | jq '.workflow_runs | length')"
+            if [ "$count" = "0" ]; then
+              break
+            fi
+
+            echo "$response" | jq -r '.workflow_runs[] | [.id, .name, .conclusion, .html_url] | @tsv' |
+            while IFS=$'\t' read -r run_id run_name conclusion html_url; do
+              echo "FAILED RUN: $run_id | $run_name | $html_url"
+              if [ "$DRY_RUN" != "true" ]; then
+                gh api \
+                  --method DELETE \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/$REPO/actions/runs/$run_id"
+                echo "Deleted: $run_id"
+              fi
+            done
+
+            listed=$((listed + count))
+            page=$((page + 1))
+          done
+
+          echo "Listed failed runs: $listed"
+          if [ "$DRY_RUN" != "true" ]; then
+            echo "Deletion requested for all listed failed runs."
+          fi
