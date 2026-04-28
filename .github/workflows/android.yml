@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,10 +31,35 @@ jobs:
           gradle-version: '8.6'
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+        shell: bash
+        run: |
+          set +e
+          gradle assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+          echo ${PIPESTATUS[0]} > build-exit-code.txt
+          exit 0
+
+      - name: Upload Build Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: |
+            build.log
+            build-exit-code.txt
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: universal-image-studio-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: ignore
+
+      - name: Fail if build failed
+        shell: bash
+        run: |
+          code=$(cat build-exit-code.txt 2>/dev/null || echo 1)
+          if [ "$code" != "0" ]; then
+            echo "Gradle build failed with exit code $code. See build-log artifact."
+            exit "$code"
+          fi
