@@ -52,9 +52,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -300,18 +298,21 @@ fun MainScreen() {
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             SectionTitle("任务模式", "支持文生图与图生图/编辑，常用参数已收敛为下拉选择")
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                SegmentedButton(
-                                    selected = !editMode,
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
                                     onClick = { editMode = false },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                                    modifier = Modifier.weight(1f),
+                                    enabled = editMode
                                 ) {
                                     Text("文生图")
                                 }
-                                SegmentedButton(
-                                    selected = editMode,
+                                Button(
                                     onClick = { editMode = true },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !editMode
                                 ) {
                                     Text("图生图 / 编辑")
                                 }
