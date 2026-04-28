@@ -3,12 +3,14 @@ package com.operit.hohyaiimage
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -93,7 +95,16 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                AndroidColor.TRANSPARENT,
+                AndroidColor.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                AndroidColor.TRANSPARENT,
+                AndroidColor.TRANSPARENT
+            )
+        )
         setContent { AppTheme { MainScreen() } }
     }
 }
@@ -489,7 +500,7 @@ fun MainScreen() {
                 imageBytes?.let { bytes ->
                     item {
                         val bitmap = remember(bytes) {
-                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            decodePreviewBitmap(bytes)
                         }
                         if (bitmap != null) {
                             ElevatedCard(
@@ -812,6 +823,21 @@ private fun HistoryCard(item: HistoryItem) {
         )
     }
 }
+
+fun decodePreviewBitmap(bytes: ByteArray, maxSide: Int = 1600) =
+    BitmapFactory.Options().run {
+        inJustDecodeBounds = true
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, this)
+
+        var sample = 1
+        while ((outWidth / sample) > maxSide || (outHeight / sample) > maxSide) {
+            sample *= 2
+        }
+
+        inJustDecodeBounds = false
+        inSampleSize = sample.coerceAtLeast(1)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, this)
+    }
 
 fun endpoint(baseUrl: String, path: String): String {
     val b = baseUrl.trim().trimEnd('/')
