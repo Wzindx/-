@@ -307,8 +307,12 @@ fun callEdit(
 
 fun parseImageResponse(conn: HttpURLConnection): ByteArray {
     val code = conn.responseCode
-    val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-    val text = stream.bufferedReader().readText()
+    val stream = if (code in 200..299) {
+        conn.inputStream
+    } else {
+        conn.errorStream ?: conn.inputStream
+    }
+    val text = stream.bufferedReader().use { it.readText() }
     if (code !in 200..299) error("HTTP $code: $text")
     val data = JSONObject(text).optJSONArray("data") ?: error("响应缺少 data")
     val first = data.optJSONObject(0) ?: error("响应 data 为空")
