@@ -81,6 +81,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -472,18 +473,33 @@ fun MainScreen() {
                                         try {
                                             val result = withContext(Dispatchers.IO) {
                                                 if (editMode) {
-                                                    callEdit(
-                                                        context = context,
-                                                        baseUrl = baseUrl,
-                                                        apiKey = apiKey,
-                                                        model = editModel,
-                                                        prompt = prompt,
-                                                        imageUri = selectedImage,
-                                                        size = size,
-                                                        quality = quality,
-                                                        outputFormat = outputFormat,
-                                                        background = background
-                                                    )
+                                                    when (apiMode) {
+                                                        ApiMode.IMAGES -> callEdit(
+                                                            context = context,
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
+                                                            model = editModel,
+                                                            prompt = prompt,
+                                                            imageUri = selectedImage,
+                                                            size = size,
+                                                            quality = quality,
+                                                            outputFormat = outputFormat,
+                                                            background = background
+                                                        )
+
+                                                        ApiMode.RESPONSES -> callEditResponses(
+                                                            context = context,
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
+                                                            model = editModel,
+                                                            prompt = prompt,
+                                                            imageUri = selectedImage,
+                                                            size = size,
+                                                            quality = quality,
+                                                            outputFormat = outputFormat,
+                                                            background = background
+                                                        )
+                                                    }
                                                 } else {
                                                     callGenerate(
                                                         baseUrl = baseUrl,
@@ -981,6 +997,66 @@ fun callEdit(
     return parseImageResponse(conn)
 }
 
+fun callEditResponses(
+    context: Context,
+    baseUrl: String,
+    apiKey: String,
+    model: String,
+    prompt: String,
+    imageUri: Uri?,
+    size: String,
+    quality: String,
+    outputFormat: String,
+    background: String
+): ByteArray {
+    require(apiKey.isNotBlank()) { "请填写 API Key" }
+    require(prompt.isNotBlank()) { "请填写编辑指令" }
+    val sourceImageUri = requireNotNull(imageUri) { "请先选择参考图" }
+
+    val imageBytes = context.contentResolver.openInputStream(sourceImageUri)?.use { it.readBytes() }
+        ?: error("无法读取参考图")
+    val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+
+    val inputContent = JSONArray().apply {
+        put(JSONObject().put("type", "input_text").put("text", "Use the following text as the complete prompt. Do not rewrite it:\n$prompt"))
+        put(JSONObject().put("type", "input_image").put("image_url", inputImageDataUrl))
+    }
+
+    val tool = JSONObject()
+        .put("type", "image_generation")
+        .put("action", "edit")
+        .put("size", size)
+        .put("quality", quality)
+        .put("output_format", outputFormat)
+
+    if (background.isNotBlank()) {
+        tool.put("background", background)
+    }
+
+    val body = JSONObject()
+        .put("model", model.trim())
+        .put(
+            "input",
+            JSONArray().put(
+                JSONObject()
+                    .put("role", "user")
+                    .put("content", inputContent)
+            )
+        )
+        .put("tools", JSONArray().put(tool))
+        .put("tool_choice", "required")
+
+    val conn = URL(endpoint(baseUrl, "/responses")).openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.connectTimeout = 30000
+    conn.readTimeout = 180000
+    conn.doOutput = true
+    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.outputStream.use { it.write(body.toString().toByteArray()) }
+    return parseResponsesImageResponse(conn, outputFormat)
+}
+
 fun parseImageResponse(conn: HttpURLConnection): ByteArray {
     val code = conn.responseCode
     val stream = if (code in 200..299) conn.inputStream else conn.errorStream ?: conn.inputStream
@@ -996,6 +1072,56 @@ fun parseImageResponse(conn: HttpURLConnection): ByteArray {
     if (url.isNotBlank()) return download(url)
 
     error("响应中既没有 url 也没有 b64_json")
+}
+
+fun parseResponsesImageResponse(conn: HttpURLConnection, outputFormat: String): ByteArray {
+    val code = conn.responseCode
+    val stream = if (code in 200..299) conn.inputStream else conn.errorStream ?: conn.inputStream
+    val text = stream.bufferedReader().use { it.readText() }
+    if (code !in 200..299) error("HTTP $code: $text")
+
+    val output = JSONObject(text).optJSONArray("output") ?: error("响应缺少 output")
+    for (index in 0 until output.length()) {
+        val item = output.optJSONObject(index) ?: continue
+        if (item.optString("type") != "image_generation_call") continue
+
+        val result = item.optString("result", "")
+        if (result.isNotBlank()) {
+            val pureBase64 = result.removePrefix("data:image/png;base64,")
+                .removePrefix("data:image/jpeg;base64,")
+                .removePrefix("data:image/webp;base64,")
+            return Base64.decode(pureBase64, Base64.DEFAULT)
+        }
+    }
+
+    val fallbackMime = when (outputFormat) {
+        "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        else -> "image/png"
+    }
+
+    for (index in 0 until output.length()) {
+        val item = output.optJSONObject(index) ?: continue
+        if (item.optString("type") != "image_generation_call") continue
+
+        val resultUrl = item.optString("url", "")
+        if (resultUrl.isNotBlank()) {
+            return download(resultUrl)
+        }
+
+        val nested = item.optJSONObject("result")
+        val nestedUrl = nested?.optString("url", "") ?: ""
+        if (nestedUrl.isNotBlank()) {
+            return download(nestedUrl)
+        }
+
+        val nestedB64 = nested?.optString("b64_json", "") ?: ""
+        if (nestedB64.isNotBlank()) {
+            return Base64.decode(nestedB64, Base64.DEFAULT)
+        }
+    }
+
+    error("Responses API 未返回可用图片数据（既没有 result/base64，也没有 url）")
 }
 
 fun download(url: String): ByteArray {
