@@ -34,12 +34,45 @@ jobs:
 
       - name: Download Release APK artifact from triggering workflow
         if: github.event_name == 'workflow_run'
+        id: download_release_apk
         uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
         with:
           run_id: ${{ github.event.workflow_run.id }}
           name: universal-image-studio-release-apk
-          path: dist
-          if_no_artifact_found: fail
+          path: dist-release
+          if_no_artifact_found: warn
+
+      - name: Download Debug APK artifact as fallback
+        if: github.event_name == 'workflow_run'
+        id: download_debug_apk
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
+        with:
+          run_id: ${{ github.event.workflow_run.id }}
+          name: universal-image-studio-debug-apk
+          path: dist-debug
+          if_no_artifact_found: warn
+
+      - name: Collect APK for release
+        if: github.event_name == 'workflow_run'
+        shell: bash
+        run: |
+          mkdir -p dist
+          if find dist-release -name '*.apk' -print -quit 2>/dev/null | grep -q .; then
+            cp "$(find dist-release -name '*.apk' -print -quit)" dist/
+            echo "APK_CHANNEL=release APK" >> "$GITHUB_ENV"
+          elif find dist-debug -name '*.apk' -print -quit 2>/dev/null | grep -q .; then
+            cp "$(find dist-debug -name '*.apk' -print -quit)" dist/
+            echo "APK_CHANNEL=debug APK" >> "$GITHUB_ENV"
+          else
+            echo "No APK artifact found from triggering workflow."
+            echo "dist-release:"
+            find dist-release -maxdepth 3 -type f -print 2>/dev/null || true
+            echo "dist-debug:"
+            find dist-debug -maxdepth 3 -type f -print 2>/dev/null || true
+            exit 1
+          fi
 
       - name: Resolve release variables
         shell: bash
@@ -101,9 +134,27 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          gradle assembleRelease --no-daemon --stacktrace
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            GRADLE_CMD=./gradlew
+          else
+            GRADLE_CMD=gradle
+          fi
+
+          set +e
+          $GRADLE_CMD :app:assembleRelease --no-daemon --stacktrace
+          release_code=$?
+          set -e
+
           mkdir -p dist
-          cp app/build/outputs/apk/release/*.apk dist/
+          if ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+            cp app/build/outputs/apk/release/*.apk dist/
+            echo "APK_CHANNEL=release APK" >> "$GITHUB_ENV"
+          else
+            $GRADLE_CMD :app:assembleDebug --no-daemon --stacktrace
+            cp app/build/outputs/apk/debug/*.apk dist/
+            echo "APK_CHANNEL=debug APK" >> "$GITHUB_ENV"
+          fi
 
       - name: Verify APK exists
         shell: bash
@@ -117,21 +168,33 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           name: UniversalImageStudio ${{ env.TAG_NAME }}
           body: |
-            ## 更新内容
+            ## v1.3 更新内容
 
-            - 独立版本发布到 `${{ env.TAG_NAME }}`，不再覆盖旧版本 Release
-            - 首页改为聚焦任务创建，接口配置迁移到二级设置页，避免首页直接裸露
-            - 多个参数选择项改为下拉栏，降低页面拥挤与交互负担
-            - 优化主界面结构与渲染压力，缓解 debug 版卡顿问题
-            - 调整应用图标前景安全区，避免图标内容过满
-            - 使用固定签名发布，便于后续版本持续同签名升级
-            - 本次发布产物切换为 `release APK`，减少调试开销
+            这次版本重点优化首页体验、配置安全性和低端设备流畅度。
+
+            ### 界面与交互
+            - 首页重新精简重组，聚焦“任务创建”和“开始生成”，减少首屏一次性渲染内容。
+            - 接口配置、API Key、模型 ID 统一迁移到二级“接口设置”页面，不再在首页直接裸露。
+            - 模型选择从首页移除，首页仅展示当前模型摘要，避免误触和配置暴露。
+            - 尺寸、质量、输出格式、背景、生成数量等选项统一使用下拉选择，替代 Chip 式铺开布局。
+            - 高级参数默认收起，需要时再展开，降低页面拥挤感。
+            - 历史记录默认收起，展开后最多显示最近 8 条，缓解大量历史记录导致的卡顿。
+
+            ### 图标与视觉
+            - 应用图标前景缩进到 adaptive icon 安全区，避免图标内容过满或被系统裁切。
+            - 保持原有主色调和卡片风格，但减少首页信息密度。
+
+            ### 构建与发布
+            - 修复 GitHub Actions 云端构建流程。
+            - 支持没有 Gradle Wrapper 时自动使用云端 Gradle 8.6 构建。
+            - 发布流程优先上传 release APK；如果 release APK 不存在，自动使用 debug APK 兜底，保证发布页有可下载安装包。
+            - 发布页固定使用版本 `${{ env.TAG_NAME }}`，便于像之前一样从 Releases 页面下载。
 
             ### 版本信息
             - Release Tag: `${{ env.TAG_NAME }}`
             - Version Name: `${{ env.VERSION_NAME }}`
             - Gradle Version Name: `${{ env.GRADLE_VERSION_NAME }}`
-            - Artifact: release APK
+            - Artifact: `${{ env.APK_CHANNEL }}`
           files: dist/*.apk
           draft: false
           prerelease: false
