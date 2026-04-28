@@ -1,3 +1,4 @@
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -11,19 +12,34 @@ android {
     val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
     val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
     val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+
+    val bundledKeystore = file("keystore/universal-image-studio-release.jks")
+    val bundledKeystorePassword = "UniversalImageStudio2026"
+    val bundledKeyAlias = "universal-image-studio"
+    val bundledKeyPassword = "UniversalImageStudio2026"
+
     val hasSigningEnv =
         !keystorePath.isNullOrBlank() &&
         !keystorePassword.isNullOrBlank() &&
         !keyAlias.isNullOrBlank() &&
         !keyPassword.isNullOrBlank()
+    val hasBundledSigning = bundledKeystore.exists()
+    val hasReleaseSigning = hasSigningEnv || hasBundledSigning
 
-    if (hasSigningEnv) {
+    if (hasReleaseSigning) {
         signingConfigs {
             create("sharedRelease") {
-                storeFile = file(keystorePath!!)
-                storePassword = keystorePassword
-                this.keyAlias = keyAlias
-                this.keyPassword = keyPassword
+                if (hasSigningEnv) {
+                    storeFile = file(keystorePath!!)
+                    storePassword = keystorePassword
+                    this.keyAlias = keyAlias
+                    this.keyPassword = keyPassword
+                } else {
+                    storeFile = bundledKeystore
+                    storePassword = bundledKeystorePassword
+                    this.keyAlias = bundledKeyAlias
+                    this.keyPassword = bundledKeyPassword
+                }
             }
         }
     }
@@ -32,19 +48,19 @@ android {
         applicationId = "com.operit.hohyaiimage"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
     }
 
     buildTypes {
         debug {
-            if (hasSigningEnv) {
+            if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("sharedRelease")
             }
         }
         release {
             isMinifyEnabled = false
-            if (hasSigningEnv) {
+            if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("sharedRelease")
             }
         }
