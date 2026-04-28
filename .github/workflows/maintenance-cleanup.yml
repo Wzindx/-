@@ -1,0 +1,77 @@
+name: Maintenance Cleanup
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - ".github/workflows/maintenance-cleanup.yml"
+  workflow_dispatch:
+    inputs:
+      delete_failed_runs:
+        description: "Delete failed/cancelled/skipped workflow runs"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      cleanup_release_assets:
+        description: "Delete stale debug APK assets from v1.4 release"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete stale debug APK release asset
+        if: github.event_name == 'push' || inputs.cleanup_release_assets == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          echo "Deleting stale app-debug.apk from v1.4 release if it exists..."
+          gh release delete-asset v1.4 app-debug.apk -y
+          echo "Release asset cleanup finished."
+
+      - name: Delete failed/cancelled/skipped workflow runs
+        if: github.event_name == 'push' || inputs.delete_failed_runs == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          echo "Scanning failed/cancelled/skipped workflow runs in $REPO ..."
+          gh api --paginate "repos/$REPO/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | select((.conclusion == "failure") or (.conclusion == "cancelled") or (.conclusion == "skipped") or (.conclusion == "timed_out")) | .id' \
+            > failed-run-ids.txt
+
+          if [ ! -s failed-run-ids.txt ]; then
+            echo "No failed/cancelled/skipped workflow runs found."
+            exit 0
+          fi
+
+          echo "Runs to delete:"
+          cat failed-run-ids.txt
+
+          while IFS= read -r run_id; do
+            if [ -z "$run_id" ] || [ "$run_id" = "$CURRENT_RUN_ID" ]; then
+              continue
+            fi
+            echo "Deleting workflow run $run_id ..."
+            gh api -X DELETE "repos/$REPO/actions/runs/$run_id" || true
+            sleep 0.2
+          done < failed-run-ids.txt
+
+          echo "Workflow run cleanup finished."
