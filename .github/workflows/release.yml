@@ -1,0 +1,95 @@
+name: Release Android APK
+
+on:
+  workflow_run:
+    workflows: ["Build Android APK"]
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download APK artifact from triggering workflow
+        if: github.event_name == 'workflow_run'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ github.event.workflow_run.id }}
+          name: universal-image-studio-debug-apk
+          path: dist
+          if_no_artifact_found: fail
+
+      - name: Set version variables
+        shell: bash
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)
+          if [ -z "$VERSION_NAME" ]; then
+            echo "Failed to read versionName from app/build.gradle.kts"
+            exit 1
+          fi
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "TAG_NAME=v$VERSION_NAME" >> $GITHUB_ENV
+
+      - name: Fallback build APK for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: github.event_name == 'workflow_dispatch'
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        if: github.event_name == 'workflow_dispatch'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+
+      - name: Build Debug APK for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          gradle assembleDebug --no-daemon --stacktrace
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/*.apk dist/
+
+      - name: Verify APK exists
+        shell: bash
+        run: |
+          ls -lah dist
+          test -n "$(find dist -maxdepth 1 -name '*.apk' -print -quit)"
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: UniversalImageStudio ${{ env.TAG_NAME }}
+          body: |
+            Automated release for UniversalImageStudio.
+
+            - Version: ${{ env.VERSION_NAME }}
+            - Branch: main
+            - Artifact: debug APK
+
+            Notes:
+            - Built successfully by GitHub Actions
+            - APK is attached below
+          files: dist/*.apk
+          draft: false
+          prerelease: false
+          make_latest: true
