@@ -32,12 +32,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download APK artifact from triggering workflow
+      - name: Download Release APK artifact from triggering workflow
         if: github.event_name == 'workflow_run'
         uses: dawidd6/action-download-artifact@v6
         with:
           run_id: ${{ github.event.workflow_run.id }}
-          name: universal-image-studio-debug-apk
+          name: universal-image-studio-release-apk
           path: dist
           if_no_artifact_found: fail
 
@@ -101,8 +101,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          gradle assembleRelease --no-daemon --stacktrace
           mkdir -p dist
           cp app/build/outputs/apk/release/*.apk dist/
 
