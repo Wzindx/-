@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish to, e.g. v1.1"
+        description: "Release tag to publish to, e.g. v1.3"
         required: false
         type: string
       version_name:
-        description: "Optional version name override, e.g. 1.1"
+        description: "Optional version name override, e.g. 1.3"
         required: false
         type: string
 
@@ -92,7 +92,7 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > signing-keystore.jks
           echo "ANDROID_KEYSTORE_PATH=$PWD/signing-keystore.jks" >> $GITHUB_ENV
 
-      - name: Build Debug APK for manual dispatch
+      - name: Build Release APK for manual dispatch
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         env:
@@ -102,9 +102,9 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
           mkdir -p dist
-          cp app/build/outputs/apk/debug/*.apk dist/
+          cp app/build/outputs/apk/release/*.apk dist/
 
       - name: Verify APK exists
         shell: bash
@@ -121,17 +121,18 @@ jobs:
             ## 更新内容
 
             - 独立版本发布到 `${{ env.TAG_NAME }}`，不再覆盖旧版本 Release
-            - 修复 UI 重构后的 Kotlin / Compose 构建问题
-            - 扩充图像模型选项
-            - 扩充 1K / 2K / 4K 画布尺寸与比例说明
-            - 更新应用图标与界面布局
-            - 预留固定签名配置入口，便于后续保持安装签名一致
+            - 首页改为聚焦任务创建，接口配置迁移到二级设置页，避免首页直接裸露
+            - 多个参数选择项改为下拉栏，降低页面拥挤与交互负担
+            - 优化主界面结构与渲染压力，缓解 debug 版卡顿问题
+            - 调整应用图标前景安全区，避免图标内容过满
+            - 使用固定签名发布，便于后续版本持续同签名升级
+            - 本次发布产物切换为 `release APK`，减少调试开销
 
             ### 版本信息
             - Release Tag: `${{ env.TAG_NAME }}`
             - Version Name: `${{ env.VERSION_NAME }}`
             - Gradle Version Name: `${{ env.GRADLE_VERSION_NAME }}`
-            - Artifact: debug APK
+            - Artifact: release APK
           files: dist/*.apk
           draft: false
           prerelease: false
