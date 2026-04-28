@@ -36,15 +36,29 @@ jobs:
         with:
           gradle-version: '8.6'
 
-      - name: Build Debug APK
+      - name: Decode signing keystore
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
         shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > signing-keystore.jks
+          echo "ANDROID_KEYSTORE_PATH=$PWD/signing-keystore.jks" >> $GITHUB_ENV
+
+      - name: Build Signed Release APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ env.ANDROID_KEYSTORE_PATH }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set +e
-          gradle assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+          gradle assembleRelease --no-daemon --stacktrace --info 2>&1 | tee build.log
           gradle_code=${PIPESTATUS[0]}
 
-          if ls app/build/outputs/apk/debug/*.apk >/dev/null 2>&1; then
-            echo "APK artifact exists; treating build as successful."
+          if ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+            echo "Release APK artifact exists; treating build as successful."
             echo 0 > build-exit-code.txt
           else
             echo "$gradle_code" > build-exit-code.txt
@@ -76,20 +90,20 @@ jobs:
             git push
           fi
 
-      - name: Upload Debug APK
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: universal-image-studio-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: universal-image-studio-release-apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: ignore
 
       - name: Validate APK Exists
         shell: bash
         run: |
-          if ls app/build/outputs/apk/debug/*.apk >/dev/null 2>&1; then
-            echo "APK build succeeded."
+          if ls app/build/outputs/apk/release/*.apk >/dev/null 2>&1; then
+            echo "Release APK build succeeded."
           else
-            echo "APK build failed. See build-report/build.log."
+            echo "Release APK build failed. See build-report/build.log."
             exit 1
           fi
