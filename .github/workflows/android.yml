@@ -33,12 +33,20 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Set up Gradle cache
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
 
-      - name: Ensure Gradle wrapper executable
+      - name: Select Gradle command
         shell: bash
-        run: chmod +x ./gradlew
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            echo "GRADLE_CMD=./gradlew" >> "$GITHUB_ENV"
+          else
+            echo "GRADLE_CMD=gradle" >> "$GITHUB_ENV"
+          fi
 
       - name: Decode signing keystore
         if: env.HAS_ANDROID_KEYSTORE == 'true'
@@ -53,7 +61,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build-debug.log
+          $GRADLE_CMD :app:assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build-debug.log
           echo "${PIPESTATUS[0]}" > build-debug-exit-code.txt
           exit 0
 
@@ -66,7 +74,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set +e
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace --info 2>&1 | tee build-release.log
+          $GRADLE_CMD :app:assembleRelease --no-daemon --stacktrace --info 2>&1 | tee build-release.log
           echo "${PIPESTATUS[0]}" > build-release-exit-code.txt
           exit 0
 
