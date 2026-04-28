@@ -37,10 +37,23 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          set +e
-          echo "Deleting stale app-debug.apk from v1.4 release if it exists..."
-          gh release delete-asset v1.4 app-debug.apk -y
+          set -euo pipefail
+          echo "Looking for stale app-debug.apk in v1.4 release..."
+          release_json="$(gh api "repos/$REPO/releases/tags/v1.4")"
+          asset_ids="$(echo "$release_json" | jq -r '.assets[] | select(.name == "app-debug.apk") | .id')"
+
+          if [ -z "$asset_ids" ]; then
+            echo "No stale app-debug.apk asset found."
+            exit 0
+          fi
+
+          for asset_id in $asset_ids; do
+            echo "Deleting stale app-debug.apk asset id: $asset_id"
+            gh api -X DELETE "repos/$REPO/releases/assets/$asset_id"
+          done
+
           echo "Release asset cleanup finished."
 
       - name: Delete failed/cancelled/skipped workflow runs
