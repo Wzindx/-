@@ -75,10 +75,10 @@ fun MainScreen() {
     var outputFormat by remember { mutableStateOf("png") }
     var background by remember { mutableStateOf("auto") }
     var editMode by remember { mutableStateOf(false) }
-    var selectedImage by remember { mutableStateOf<Uri?>() }
+    var selectedImage by remember { mutableStateOf<Uri?>(value = null) }
     var isLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("就绪") }
-    var imageBytes by remember { mutableStateOf<ByteArray?>() }
+    var imageBytes by remember { mutableStateOf<ByteArray?>(value = null) }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
