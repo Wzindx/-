@@ -7,16 +7,47 @@ android {
     namespace = "com.operit.hohyaiimage"
     compileSdk = 34
 
+    val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+    val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+    val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+    val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+    val hasSigningEnv =
+        !keystorePath.isNullOrBlank() &&
+        !keystorePassword.isNullOrBlank() &&
+        !keyAlias.isNullOrBlank() &&
+        !keyPassword.isNullOrBlank()
+
+    if (hasSigningEnv) {
+        signingConfigs {
+            create("sharedRelease") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.operit.hohyaiimage"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
-        release { isMinifyEnabled = false }
+        debug {
+            if (hasSigningEnv) {
+                signingConfig = signingConfigs.getByName("sharedRelease")
+            }
+        }
+        release {
+            isMinifyEnabled = false
+            if (hasSigningEnv) {
+                signingConfig = signingConfigs.getByName("sharedRelease")
+            }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
