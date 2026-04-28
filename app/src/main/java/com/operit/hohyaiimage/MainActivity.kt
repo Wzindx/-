@@ -18,7 +18,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,18 +48,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
-
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -112,6 +108,16 @@ class MainActivity : ComponentActivity() {
 private enum class ScreenRoute {
     MAIN,
     SETTINGS
+}
+
+private enum class ApiMode(val value: String, val label: String) {
+    IMAGES("images", "Images API"),
+    RESPONSES("responses", "Responses API");
+
+    companion object {
+        fun from(value: String?): ApiMode =
+            entries.firstOrNull { it.value == value } ?: IMAGES
+    }
 }
 
 data class HistoryItem(
@@ -193,8 +199,11 @@ fun MainScreen() {
 
     var baseUrl by rememberSaveable { mutableStateOf(prefs.getString("baseUrl", "https://api.openai.com/v1") ?: "") }
     var apiKey by rememberSaveable { mutableStateOf(prefs.getString("apiKey", "") ?: "") }
-    var model by rememberSaveable { mutableStateOf(prefs.getString("model", "gpt-image-2") ?: "gpt-image-2") }
-    var customModel by rememberSaveable { mutableStateOf(model) }
+    var apiMode by rememberSaveable { mutableStateOf(ApiMode.from(prefs.getString("apiMode", ApiMode.IMAGES.value))) }
+    var generateModel by rememberSaveable { mutableStateOf(prefs.getString("generateModel", prefs.getString("model", "gpt-image-2")) ?: "gpt-image-2") }
+    var editModel by rememberSaveable { mutableStateOf(prefs.getString("editModel", "gpt-image-1") ?: "gpt-image-1") }
+    var customGenerateModel by rememberSaveable { mutableStateOf(generateModel) }
+    var customEditModel by rememberSaveable { mutableStateOf(editModel) }
     var prompt by rememberSaveable { mutableStateOf("") }
     var size by rememberSaveable { mutableStateOf("1024x1024") }
     var quality by rememberSaveable { mutableStateOf("auto") }
@@ -228,25 +237,40 @@ fun MainScreen() {
         ScreenRoute.SETTINGS -> SettingsScreen(
             baseUrl = baseUrl,
             apiKey = apiKey,
-            customModel = customModel,
-            currentModel = model,
+            apiMode = apiMode,
+            customGenerateModel = customGenerateModel,
+            currentGenerateModel = generateModel,
+            customEditModel = customEditModel,
+            currentEditModel = editModel,
             recommendedModels = imageModels,
             onBaseUrlChange = { baseUrl = it },
             onApiKeyChange = { apiKey = it },
-            onCustomModelChange = {
-                customModel = it
-                model = it
+            onApiModeChange = { apiMode = it },
+            onCustomGenerateModelChange = {
+                customGenerateModel = it
+                generateModel = it
             },
-            onSelectModel = {
-                model = it
-                customModel = it
+            onSelectGenerateModel = {
+                generateModel = it
+                customGenerateModel = it
+            },
+            onCustomEditModelChange = {
+                customEditModel = it
+                editModel = it
+            },
+            onSelectEditModel = {
+                editModel = it
+                customEditModel = it
             },
             onBack = { currentRoute = ScreenRoute.MAIN },
             onSave = {
                 prefs.edit()
                     .putString("baseUrl", baseUrl.trim())
                     .putString("apiKey", apiKey.trim())
-                    .putString("model", model.trim())
+                    .putString("apiMode", apiMode.value)
+                    .putString("generateModel", generateModel.trim())
+                    .putString("editModel", editModel.trim())
+                    .putString("model", generateModel.trim())
                     .apply()
                 status = "接口设置已保存。"
                 currentRoute = ScreenRoute.MAIN
@@ -333,7 +357,11 @@ fun MainScreen() {
 
                             InfoCard(
                                 title = "当前模型",
-                                content = if (model.isBlank()) "未设置，请进入接口设置选择模型" else "$model（接口设置中可修改）"
+                                content = buildString {
+                                    appendLine("接口模式：${apiMode.label}")
+                                    appendLine("文生图：${if (generateModel.isBlank()) "未设置" else generateModel}")
+                                    append("图生图：${if (editModel.isBlank()) "未设置" else editModel}")
+                                }
                             )
 
                             OutlinedTextField(
@@ -448,7 +476,7 @@ fun MainScreen() {
                                                         context = context,
                                                         baseUrl = baseUrl,
                                                         apiKey = apiKey,
-                                                        model = model,
+                                                        model = editModel,
                                                         prompt = prompt,
                                                         imageUri = selectedImage,
                                                         size = size,
@@ -460,7 +488,7 @@ fun MainScreen() {
                                                     callGenerate(
                                                         baseUrl = baseUrl,
                                                         apiKey = apiKey,
-                                                        model = model,
+                                                        model = generateModel,
                                                         prompt = prompt,
                                                         n = count.toIntOrNull() ?: 1,
                                                         size = size,
@@ -473,7 +501,7 @@ fun MainScreen() {
                                             val item = HistoryItem(
                                                 time = now(),
                                                 mode = if (editMode) "edit" else "generate",
-                                                model = model,
+                                                model = if (editMode) editModel else generateModel,
                                                 prompt = prompt,
                                                 path = saved
                                             )
@@ -581,13 +609,19 @@ fun MainScreen() {
 private fun SettingsScreen(
     baseUrl: String,
     apiKey: String,
-    customModel: String,
-    currentModel: String,
+    apiMode: ApiMode,
+    customGenerateModel: String,
+    currentGenerateModel: String,
+    customEditModel: String,
+    currentEditModel: String,
     recommendedModels: List<String>,
     onBaseUrlChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
-    onCustomModelChange: (String) -> Unit,
-    onSelectModel: (String) -> Unit,
+    onApiModeChange: (ApiMode) -> Unit,
+    onCustomGenerateModelChange: (String) -> Unit,
+    onSelectGenerateModel: (String) -> Unit,
+    onCustomEditModelChange: (String) -> Unit,
+    onSelectEditModel: (String) -> Unit,
     onBack: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -642,21 +676,47 @@ private fun SettingsScreen(
                         shape = RoundedCornerShape(18.dp)
                     )
 
+                    AppDropdownField(
+                        title = "接口模式",
+                        selected = apiMode.label,
+                        options = ApiMode.entries.map { it.label },
+                        onSelected = { label ->
+                            ApiMode.entries.firstOrNull { it.label == label }?.let(onApiModeChange)
+                        }
+                    )
+
                     OutlinedTextField(
-                        value = customModel,
-                        onValueChange = onCustomModelChange,
-                        label = { Text("模型 ID") },
-                        placeholder = { Text("支持手动输入兼容站的自定义模型") },
+                        value = customGenerateModel,
+                        onValueChange = onCustomGenerateModelChange,
+                        label = { Text("文生图模型 ID") },
+                        placeholder = { Text("支持手动输入自定义文生图模型") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp)
                     )
 
                     AppDropdownField(
-                        title = "推荐模型",
-                        selected = currentModel,
+                        title = "推荐文生图模型",
+                        selected = currentGenerateModel,
                         options = recommendedModels,
-                        onSelected = onSelectModel
+                        onSelected = onSelectGenerateModel
+                    )
+
+                    OutlinedTextField(
+                        value = customEditModel,
+                        onValueChange = onCustomEditModelChange,
+                        label = { Text("图生图模型 ID") },
+                        placeholder = { Text("支持手动输入自定义图生图模型") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp)
+                    )
+
+                    AppDropdownField(
+                        title = "推荐图生图模型",
+                        selected = currentEditModel,
+                        options = recommendedModels,
+                        onSelected = onSelectEditModel
                     )
 
                     Button(
