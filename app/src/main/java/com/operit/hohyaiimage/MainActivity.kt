@@ -196,6 +196,8 @@ fun MainScreen() {
     var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
+    var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
 
     val currentSizes = if (editMode) editSizes else generationSizes
     val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()
@@ -297,7 +299,7 @@ fun MainScreen() {
                             modifier = Modifier.padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            SectionTitle("任务模式", "支持文生图与图生图/编辑，常用参数已收敛为下拉选择")
+                            SectionTitle("创建任务", "首页只保留核心创作流程，接口与模型请到二级设置页维护")
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -318,14 +320,9 @@ fun MainScreen() {
                                 }
                             }
 
-                            AppDropdownField(
-                                title = "模型",
-                                selected = model,
-                                options = imageModels,
-                                onSelected = {
-                                    model = it
-                                    customModel = it
-                                }
+                            InfoCard(
+                                title = "当前模型",
+                                content = if (model.isBlank()) "未设置，请进入接口设置选择模型" else "$model（接口设置中可修改）"
                             )
 
                             OutlinedTextField(
@@ -366,7 +363,7 @@ fun MainScreen() {
                                 }
                             }
 
-                            SectionTitle("尺寸与参数", "尺寸、质量、输出格式、背景与数量全部下拉化，减少首页拥挤与重绘")
+                            SectionTitle("尺寸", "常用尺寸使用下拉选择，高级参数默认收起以降低首页首次渲染压力")
 
                             AppDropdownField(
                                 title = "尺寸",
@@ -384,38 +381,44 @@ fun MainScreen() {
                                 content = "${selectedSizeOption.title} · ${selectedSizeOption.value}\n${selectedSizeOption.desc}"
                             )
 
-                            InfoCard(
-                                title = "比例说明",
-                                content = ratioGuide.joinToString("\n")
-                            )
+                            TextButton(onClick = { showAdvancedOptions = !showAdvancedOptions }) {
+                                Text(if (showAdvancedOptions) "收起高级参数" else "展开高级参数")
+                            }
 
-                            AppDropdownField(
-                                title = "质量",
-                                selected = quality,
-                                options = qualityOptions,
-                                onSelected = { quality = it }
-                            )
+                            if (showAdvancedOptions) {
+                                InfoCard(
+                                    title = "比例说明",
+                                    content = ratioGuide.joinToString("\n")
+                                )
 
-                            AppDropdownField(
-                                title = "输出格式",
-                                selected = outputFormat,
-                                options = outputFormats,
-                                onSelected = { outputFormat = it }
-                            )
+                                AppDropdownField(
+                                    title = "质量",
+                                    selected = quality,
+                                    options = qualityOptions,
+                                    onSelected = { quality = it }
+                                )
 
-                            AppDropdownField(
-                                title = "背景",
-                                selected = background,
-                                options = backgroundOptions,
-                                onSelected = { background = it }
-                            )
+                                AppDropdownField(
+                                    title = "输出格式",
+                                    selected = outputFormat,
+                                    options = outputFormats,
+                                    onSelected = { outputFormat = it }
+                                )
 
-                            AppDropdownField(
-                                title = "生成数量",
-                                selected = count,
-                                options = (1..10).map { it.toString() },
-                                onSelected = { count = it }
-                            )
+                                AppDropdownField(
+                                    title = "背景",
+                                    selected = background,
+                                    options = backgroundOptions,
+                                    onSelected = { background = it }
+                                )
+
+                                AppDropdownField(
+                                    title = "生成数量",
+                                    selected = count,
+                                    options = (1..10).map { it.toString() },
+                                    onSelected = { count = it }
+                                )
+                            }
 
                             if (isLoading) {
                                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -529,14 +532,28 @@ fun MainScreen() {
                             modifier = Modifier.padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            SectionTitle("历史记录", "最近 30 条生成 / 编辑历史")
-                            if (history.isEmpty()) {
-                                Text("暂无历史记录", color = Color.Gray)
-                            } else {
-                                history.forEachIndexed { index, item ->
-                                    HistoryCard(item)
-                                    if (index != history.lastIndex) {
-                                        HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.45f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SectionTitle("历史记录", "默认收起，避免首页一次性渲染过多条目")
+                                TextButton(onClick = { showHistory = !showHistory }) {
+                                    Text(if (showHistory) "收起" else "展开")
+                                }
+                            }
+                            if (showHistory) {
+                                if (history.isEmpty()) {
+                                    Text("暂无历史记录", color = Color.Gray)
+                                } else {
+                                    history.take(8).forEachIndexed { index, item ->
+                                        HistoryCard(item)
+                                        if (index != minOf(history.size, 8) - 1) {
+                                            HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.45f))
+                                        }
+                                    }
+                                    if (history.size > 8) {
+                                        Text("仅显示最近 8 条，其余记录仍已保留。", color = Color.Gray)
                                     }
                                 }
                             }
