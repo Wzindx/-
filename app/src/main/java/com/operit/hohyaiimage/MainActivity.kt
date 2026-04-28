@@ -273,7 +273,7 @@ fun callEdit(
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(prompt.isNotBlank()) { "请填写编辑指令" }
-    require(imageUri != null) { "请先选择参考图" }
+    val sourceImageUri = requireNotNull(imageUri) { "请先选择参考图" }
 
     val boundary = "----AndroidBoundary${UUID.randomUUID()}"
     val conn = URL(endpoint(baseUrl, "/images/edits")).openConnection() as HttpURLConnection
@@ -299,7 +299,7 @@ fun callEdit(
         out.write("--$boundary\r\n".toByteArray())
         out.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r\n".toByteArray())
         out.write("Content-Type: image/png\r\n\r\n".toByteArray())
-        context.contentResolver.openInputStream(imageUri!!)?.use { it.copyTo(out) }
+        context.contentResolver.openInputStream(sourceImageUri)?.use { it.copyTo(out) }
         out.write("\r\n--$boundary--\r\n".toByteArray())
     }
     return parseImageResponse(conn)
