@@ -519,35 +519,24 @@ fun MainScreen() {
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
+                            .padding(horizontal = 4.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "通用图像工坊",
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "首页聚焦任务创建，接口配置移入二级页面，交互更轻量",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            TextButton(onClick = { showReferenceSheet = true }) {
-                                Text("参考图", color = MaterialTheme.colorScheme.onSurface)
-                            }
-                            TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {
-                                Text("接口设置", color = MaterialTheme.colorScheme.onSurface)
-                            }
-                        }
+                        Text(
+                            text = "通用图像工坊",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "输入提示词，选图后会自动切换为图生图。",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
 
@@ -560,7 +549,7 @@ fun MainScreen() {
                             modifier = Modifier.padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            SectionTitle("创建任务", "首页只保留核心创作流程，接口与模型请到二级设置页维护")
+                            SectionTitle("创作", "输入提示词，选图后会自动切换为图生图。")
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
                                 shape = RoundedCornerShape(18.dp)
@@ -589,7 +578,7 @@ fun MainScreen() {
                                         )
                                     }
                                     TextButton(onClick = { showReferenceSheet = true }) {
-                                        Text("参考图")
+                                        Text(if (selectedImageBytes == null) "选择图片" else "更换图片")
                                     }
                                 }
                             }
@@ -612,57 +601,19 @@ fun MainScreen() {
                                 shape = RoundedCornerShape(20.dp)
                             )
 
-                            SectionTitle("尺寸 / 比例", "当前接口按固定尺寸传参，比例与实际分辨率绑定显示，避免误解为可任意组合")
-
-                            AppDropdownField(
-                                title = "尺寸 / 比例",
-                                selected = selectedSizeOption.title + " · " + selectedSizeOption.value,
-                                options = currentSizes.map { "${it.title} · ${it.value}" },
-                                onSelected = { display ->
-                                    currentSizes.firstOrNull {
-                                        "${it.title} · ${it.value}" == display
-                                    }?.let { size = it.value }
-                                }
+                            ConfigEntryCard(
+                                title = "接口与模型",
+                                primary = apiMode.label,
+                                secondary = "模型：${if (selectedImageBytes != null) editModel else generateModel}",
+                                onClick = { showModelSheet = true }
                             )
 
-                            TextButton(onClick = { showAdvancedOptions = !showAdvancedOptions }) {
-                                Text(if (showAdvancedOptions) "收起高级参数" else "展开高级参数")
-                            }
-
-                            if (showAdvancedOptions) {
-                                InfoCard(
-                                    title = "尺寸说明",
-                                    content = ratioGuide.joinToString("\n")
-                                )
-
-                                AppDropdownField(
-                                    title = "画质",
-                                    selected = quality,
-                                    options = qualityOptions,
-                                    onSelected = { quality = it }
-                                )
-
-                                AppDropdownField(
-                                    title = "输出格式",
-                                    selected = outputFormat,
-                                    options = outputFormats,
-                                    onSelected = { outputFormat = it }
-                                )
-
-                                AppDropdownField(
-                                    title = "背景",
-                                    selected = background,
-                                    options = backgroundOptions,
-                                    onSelected = { background = it }
-                                )
-
-                                AppDropdownField(
-                                    title = "生成数量",
-                                    selected = count,
-                                    options = (1..10).map { it.toString() },
-                                    onSelected = { count = it }
-                                )
-                            }
+                            ConfigEntryCard(
+                                title = "生成参数",
+                                primary = selectedSizeOption.title + " · " + selectedSizeOption.value,
+                                secondary = "画质 $quality · $outputFormat · 数量 $count",
+                                onClick = { showParamsSheet = true }
+                            )
 
                             if (isLoading) {
                                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
