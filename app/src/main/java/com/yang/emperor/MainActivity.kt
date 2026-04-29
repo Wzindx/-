@@ -1456,8 +1456,7 @@ private fun AppDropdownField(
                 onDismissRequest = { expanded = false },
                 modifier = Modifier
                     .heightIn(max = 280.dp)
-                    .background(MaterialTheme.colorScheme.surface),
-                offset = DpOffset(x = 0.dp, y = 0.dp)
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1595,7 +1594,7 @@ private fun AppEditableDropdownField(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Create,
+                                imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
