@@ -88,12 +88,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.yang.emperor.ui.theme.AppTheme
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.coroutineScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.cancel
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -105,6 +106,13 @@ import java.util.Locale
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
+    private val activityTaskScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    override fun onDestroy() {
+        activityTaskScope.cancel()
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -235,7 +243,6 @@ private val errorText = Color(0xFFC03B3B)
 @Composable
 fun MainScreen() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val backgroundScope = LocalLifecycleOwner.current.lifecycle.coroutineScope
     val prefs = remember { secureConfigPreferences(context) }
 
     var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
@@ -304,7 +311,7 @@ fun MainScreen() {
 
 
     fun startBackgroundTask(task: ImageTask) {
-        backgroundScope.launch {
+        activityTaskScope.launch {
             runningTasks.add(task.id)
             val runningItem = HistoryItem(
                 time = task.time,
