@@ -94,11 +94,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          unset ANDROID_KEYSTORE_PATH
-          unset ANDROID_KEYSTORE_PASSWORD
-          unset ANDROID_KEY_ALIAS
-          unset ANDROID_KEY_PASSWORD
-
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
             GRADLE_CMD=./gradlew
