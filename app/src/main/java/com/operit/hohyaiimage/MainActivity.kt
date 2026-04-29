@@ -1,1 +1,1517 @@
-package com.operit.hohyaiimage\n\nimport android.content.ContentValues\nimport android.content.Context\nimport android.graphics.Bitmap\nimport android.graphics.BitmapFactory\nimport android.graphics.Color as AndroidColor\nimport android.net.Uri\nimport android.os.Bundle\nimport android.os.Environment\nimport android.provider.MediaStore\nimport android.util.Base64\nimport androidx.activity.ComponentActivity\nimport androidx.security.crypto.EncryptedSharedPreferences\nimport androidx.security.crypto.MasterKey\nimport androidx.activity.SystemBarStyle\nimport androidx.activity.compose.BackHandler\nimport androidx.activity.compose.rememberLauncherForActivityResult\nimport androidx.activity.compose.setContent\nimport androidx.activity.enableEdgeToEdge\nimport androidx.activity.result.contract.ActivityResultContracts\nimport androidx.compose.foundation.Image\nimport androidx.compose.foundation.background\nimport androidx.compose.foundation.border\nimport androidx.compose.foundation.layout.Arrangement\nimport androidx.compose.foundation.layout.Box\nimport androidx.compose.foundation.layout.Column\nimport androidx.compose.foundation.layout.PaddingValues\nimport androidx.compose.foundation.layout.Row\nimport androidx.compose.foundation.layout.Spacer\nimport androidx.compose.foundation.layout.aspectRatio\nimport androidx.compose.foundation.layout.fillMaxSize\nimport androidx.compose.foundation.layout.fillMaxWidth\nimport androidx.compose.foundation.layout.height\nimport androidx.compose.foundation.layout.heightIn\nimport androidx.compose.foundation.layout.navigationBarsPadding\nimport androidx.compose.foundation.layout.padding\nimport androidx.compose.foundation.layout.size\nimport androidx.compose.foundation.layout.statusBarsPadding\nimport androidx.compose.foundation.lazy.LazyColumn\nimport androidx.compose.foundation.lazy.items\nimport androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.shape.CircleShape\nimport androidx.compose.foundation.shape.RoundedCornerShape\nimport androidx.compose.foundation.verticalScroll\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.Card\nimport androidx.compose.material3.CardDefaults\nimport androidx.compose.material3.DividerDefaults\nimport androidx.compose.material3.DropdownMenuItem\nimport androidx.compose.material3.ElevatedCard\nimport androidx.compose.material3.ExperimentalMaterial3Api\nimport androidx.compose.material3.ExposedDropdownMenuBox\nimport androidx.compose.material3.ExposedDropdownMenuDefaults\nimport androidx.compose.material3.HorizontalDivider\nimport androidx.compose.material3.LinearProgressIndicator\nimport androidx.compose.material3.MaterialTheme\nimport androidx.compose.material3.OutlinedTextField\nimport androidx.compose.material3.Scaffold\nimport androidx.compose.material3.Surface\nimport androidx.compose.material3.Text\nimport androidx.compose.material3.TextButton\nimport androidx.compose.material3.TopAppBar\nimport androidx.compose.material3.TopAppBarDefaults\nimport androidx.compose.material3.ModalBottomSheet\nimport androidx.compose.material3.NavigationBar\nimport androidx.compose.material3.NavigationBarItem\nimport androidx.compose.material3.OutlinedButton\nimport androidx.compose.material3.rememberModalBottomSheetState\nimport androidx.compose.runtime.Composable\nimport androidx.compose.runtime.LaunchedEffect\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.remember\nimport androidx.compose.runtime.rememberCoroutineScope\nimport androidx.compose.runtime.saveable.rememberSaveable\nimport androidx.compose.runtime.setValue\nimport androidx.compose.ui.Alignment\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.draw.clip\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.graphics.asImageBitmap\nimport androidx.compose.ui.text.font.FontWeight\nimport androidx.compose.ui.text.input.PasswordVisualTransformation\nimport androidx.compose.ui.text.style.TextOverflow\nimport androidx.compose.ui.unit.dp\nimport androidx.compose.ui.unit.sp\nimport com.operit.hohyaiimage.ui.theme.AppTheme\nimport kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.launch\nimport kotlinx.coroutines.withContext\nimport org.json.JSONArray\nimport org.json.JSONObject\nimport java.io.ByteArrayOutputStream\nimport java.net.HttpURLConnection\nimport java.net.URL\nimport java.text.SimpleDateFormat\nimport java.util.Date\nimport java.util.Locale\nimport java.util.UUID\n\nclass MainActivity : ComponentActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        enableEdgeToEdge(\n            statusBarStyle = SystemBarStyle.auto(\n                AndroidColor.TRANSPARENT,\n                AndroidColor.TRANSPARENT\n            ),\n            navigationBarStyle = SystemBarStyle.auto(\n                AndroidColor.TRANSPARENT,\n                AndroidColor.TRANSPARENT\n            )\n        )\n        setContent { AppTheme { MainScreen() } }\n    }\n}\n\nprivate enum class ScreenRoute {\n    MAIN,\n    HISTORY,\n    SETTINGS\n}\n\nprivate enum class ApiMode(val value: String, val label: String) {\n    IMAGES("images", "Images API"),\n    RESPONSES("responses", "Responses API"),\n    GENERATIONS_EDIT("generations_edit", "Generations 图生图兼容");\n\n    companion object {\n        fun from(value: String?): ApiMode =\n            entries.firstOrNull { it.value == value } ?: IMAGES\n    }\n}\n\ndata class HistoryItem(\n    val time: String,\n    val mode: String,\n    val model: String,\n    val prompt: String,\n    val path: String\n)\n\ndata class SizeOption(\n    val value: String,\n    val title: String,\n    val desc: String\n)\n\nprivate val imageModels = listOf(\n    "gpt-image-2",\n    "gpt-image-1",\n    "gpt-image-1.5",\n    "gpt-image-1-mini",\n    "gpt-image-1-high",\n    "gpt-image-1-hd",\n    "prime/gpt-image-2",\n    "mix/gpt-image-2"\n)\n\nprivate val generationSizes = listOf(\n    SizeOption("1024x1024", "1:1 方图", "标准正方形，通用首选"),\n    SizeOption("1536x1024", "3:2 横图", "适合封面、壁纸横构图"),\n    SizeOption("1024x1536", "2:3 竖图", "适合头像、海报竖构图"),\n    SizeOption("2048x1536", "4:3 横图", "经典横向比例，适合相机/封面构图"),\n    SizeOption("1536x2048", "3:4 竖图", "经典竖向比例，适合人物、头像和手机阅读场景"),\n    SizeOption("2048x1152", "16:9 横图", "适合横屏、桌面壁纸、视频封面"),\n    SizeOption("1152x2048", "9:16 竖图", "适合手机壁纸、竖屏海报"),\n    SizeOption("2048x2048", "1:1 高清方图", "更高细节，更耗时"),\n    SizeOption("4096x4096", "1:1 4K 方图", "超高分辨率，适合精修"),\n    SizeOption("4096x2304", "16:9 4K 横图", "适合桌面壁纸"),\n    SizeOption("2304x4096", "9:16 4K 竖图", "适合手机壁纸")\n)\n\nprivate val editSizes = listOf(\n    SizeOption("1024x1024", "1:1 方图", "编辑稳定、兼容性最好"),\n    SizeOption("1536x1024", "3:2 横图", "横向延展"),\n    SizeOption("1024x1536", "2:3 竖图", "纵向延展"),\n    SizeOption("2048x1536", "4:3 横图", "经典横向编辑比例"),\n    SizeOption("1536x2048", "3:4 竖图", "经典竖向编辑比例"),\n    SizeOption("2048x1152", "16:9 横图", "横屏编辑比例"),\n    SizeOption("1152x2048", "9:16 竖图", "竖屏编辑比例"),\n    SizeOption("2048x2048", "1:1 高清方图", "高细节编辑")\n)\n\nprivate val qualityOptions = listOf("auto", "low", "medium", "high")\nprivate val outputFormats = listOf("png", "jpeg", "webp")\nprivate val backgroundOptions = listOf("auto", "transparent", "opaque")\n\nprivate val ratioGuide = listOf(\n    "1:1 → 1024x1024 / 2048x2048 / 4096x4096",\n    "3:2 → 1536x1024",\n    "2:3 → 1024x1536",\n    "4:3 → 2048x1536",\n    "3:4 → 1536x2048",\n    "16:9 → 2048x1152 / 4096x2304",\n    "9:16 → 1152x2048 / 2304x4096"\n)\n\nprivate val pageBg = Color(0xFFF4F6FB)\nprivate val cardBg = Color(0xFFF8FAFF)\nprivate val heroStart = Color(0xFF4E67A8)\nprivate val accent = Color(0xFF4B63B3)\nprivate val softAccent = Color(0xFFE8EEFF)\nprivate val successBg = Color(0xFFE9F7EF)\nprivate val successText = Color(0xFF1E7B4D)\nprivate val errorBg = Color(0xFFFFECEC)\nprivate val errorText = Color(0xFFC03B3B)\n\n@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nfun MainScreen() {\n    val context = androidx.compose.ui.platform.LocalContext.current\n    val scope = rememberCoroutineScope()\n    val prefs = remember { secureConfigPreferences(context) }\n\n    var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }\n\n    BackHandler(enabled = currentRoute != ScreenRoute.MAIN) {\n        currentRoute = ScreenRoute.MAIN\n    }\n\n    var baseUrl by rememberSaveable { mutableStateOf(prefs.getString("baseUrl", "https://api.openai.com/v1") ?: "") }\n    var apiKey by rememberSaveable { mutableStateOf(prefs.getString("apiKey", "") ?: "") }\n    var apiMode by rememberSaveable { mutableStateOf(ApiMode.from(prefs.getString("apiMode", ApiMode.IMAGES.value))) }\n    var generateModel by rememberSaveable { mutableStateOf(prefs.getString("generateModel", prefs.getString("model", "gpt-image-2")) ?: "gpt-image-2") }\n    var editModel by rememberSaveable { mutableStateOf(prefs.getString("editModel", "gpt-image-2") ?: "gpt-image-2") }\n    var customGenerateModel by rememberSaveable { mutableStateOf(generateModel) }\n    var customEditModel by rememberSaveable { mutableStateOf(editModel) }\n    var prompt by rememberSaveable { mutableStateOf("") }\n    var size by rememberSaveable { mutableStateOf("1024x1024") }\n    var quality by rememberSaveable { mutableStateOf("auto") }\n    var count by rememberSaveable { mutableStateOf("1") }\n    var outputFormat by rememberSaveable { mutableStateOf("png") }\n    var background by rememberSaveable { mutableStateOf("auto") }\n    var editMode by rememberSaveable { mutableStateOf(false) }\n    var selectedImage by remember { mutableStateOf(null as Uri?) }\n    var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }\n    var showReferenceSheet by rememberSaveable { mutableStateOf(false) }\n    val referenceSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)\n    var isLoading by remember { mutableStateOf(false) }\n    var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }\n    var settingsNotice by remember { mutableStateOf("") }\n    var imageBytes by remember { mutableStateOf(null as ByteArray?) }\n    var history by remember { mutableStateOf(loadHistory(prefs)) }\n    var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }\n\n    val currentSizes = if (editMode) editSizes else generationSizes\n    val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()\n\n    LaunchedEffect(selectedImageBytes) {\n        editMode = selectedImageBytes != null\n    }\n\n    LaunchedEffect(editMode) {\n        if (currentSizes.none { it.value == size }) {\n            size = currentSizes.first().value\n        }\n    }\n\n    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->\n        selectedImage = uri\n        selectedImageBytes = runCatching {\n            uri?.let { readAllBytes(context, it) }\n        }.getOrNull()\n        if (uri != null && selectedImageBytes == null) {\n            status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"\n        }\n        if (selectedImageBytes != null) {\n            showReferenceSheet = false\n            status = "已选择参考图，将自动使用图生图 / 编辑模式。"\n        }\n    }\n\n    if (showReferenceSheet) {\n        ModalBottomSheet(\n            onDismissRequest = { showReferenceSheet = false },\n            sheetState = referenceSheetState\n        ) {\n            Column(\n                modifier = Modifier\n                    .fillMaxWidth()\n                    .navigationBarsPadding()\n                    .padding(horizontal = 20.dp, vertical = 12.dp),\n                verticalArrangement = Arrangement.spacedBy(14.dp)\n            ) {\n                SectionTitle("参考图", "选择参考图后会自动切换为图生图 / 编辑；清除后自动回到文生图")\n                if (selectedImage != null) {\n                    StatusCard(\n                        if (selectedImageBytes != null)\n                            "当前参考图：${selectedImage?.lastPathSegment ?: "已选择图片"}"\n                        else\n                            "已记录参考图 URI，但图片缓存读取失败，请重新选择"\n                    )\n                } else {\n                    Text("当前未选择参考图，将使用文生图模式。", color = Color(0xFF6B7280))\n                }\n                Button(\n                    onClick = { picker.launch("image/*") },\n                    modifier = Modifier.fillMaxWidth()\n                ) {\n                    Text(if (selectedImage == null) "选择参考图" else "更换参考图")\n                }\n                OutlinedButton(\n                    onClick = {\n                        selectedImage = null\n                        selectedImageBytes = null\n                        showReferenceSheet = false\n                        status = "已清除参考图，将自动使用文生图模式。"\n                    },\n                    enabled = selectedImage != null || selectedImageBytes != null,\n                    modifier = Modifier.fillMaxWidth()\n                ) {\n                    Text("清除参考图，使用文生图")\n                }\n                Spacer(Modifier.height(8.dp))\n            }\n        }\n    }\n\n    when (currentRoute) {\n        ScreenRoute.SETTINGS -> Scaffold(\n            containerColor = pageBg,\n            bottomBar = {\n                BottomNavigationBar(\n                    currentRoute = currentRoute,\n                    onRouteSelected = { currentRoute = it }\n                )\n            }\n        ) { settingsPadding ->\n            SettingsScreen(\n            baseUrl = baseUrl,\n            apiKey = apiKey,\n            apiMode = apiMode,\n            customGenerateModel = customGenerateModel,\n            currentGenerateModel = generateModel,\n            customEditModel = customEditModel,\n            currentEditModel = editModel,\n            recommendedModels = imageModels,\n            onBaseUrlChange = { baseUrl = it },\n            onApiKeyChange = { apiKey = it },\n            onApiModeChange = { apiMode = it },\n            onCustomGenerateModelChange = {\n                customGenerateModel = it\n                generateModel = it\n            },\n            onSelectGenerateModel = {\n                generateModel = it\n                customGenerateModel = it\n            },\n            onCustomEditModelChange = {\n                customEditModel = it\n                editModel = it\n            },\n            onSelectEditModel = {\n                editModel = it\n                customEditModel = it\n            },\n            settingsNotice = settingsNotice,\n            onBack = { currentRoute = ScreenRoute.MAIN },\n            onClearConfig = {\n                prefs.edit().clear().apply()\n                baseUrl = "https://api.openai.com/v1"\n                apiKey = ""\n                apiMode = ApiMode.IMAGES\n                generateModel = "gpt-image-2"\n                editModel = "gpt-image-2"\n                customGenerateModel = generateModel\n                customEditModel = editModel\n                history = emptyList()\n                settingsNotice = "已清除接口配置、密钥和历史记录，请重新填写接口设置。"\n                currentRoute = ScreenRoute.SETTINGS\n            },\n            onSave = {\n                prefs.edit()\n                    .putString("baseUrl", baseUrl.trim())\n                    .putString("apiKey", apiKey.trim())\n                    .putString("apiMode", apiMode.value)\n                    .putString("generateModel", generateModel.trim())\n                    .putString("editModel", editModel.trim())\n                    .putString("model", generateModel.trim())\n                    .apply()\n                settingsNotice = "接口设置已保存。"\n                status = "接口设置已保存，可以开始创建图像。"\n                currentRoute = ScreenRoute.MAIN\n            },\n            outerPadding = settingsPadding\n        )\n        }\n\n        ScreenRoute.MAIN -> Scaffold(\n            containerColor = MaterialTheme.colorScheme.surface,\n            bottomBar = {\n                BottomNavigationBar(\n                    currentRoute = currentRoute,\n                    onRouteSelected = { currentRoute = it }\n                )\n            }\n        ) { padding ->\n            LazyColumn(\n                modifier = Modifier\n                    .fillMaxSize()\n                    .padding(padding)\n                    .navigationBarsPadding(),\n                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),\n                verticalArrangement = Arrangement.spacedBy(14.dp)\n            ) {\n                item {\n                    Row(\n                        modifier = Modifier\n                            .fillMaxWidth()\n                            .padding(horizontal = 4.dp, vertical = 6.dp),\n                        horizontalArrangement = Arrangement.SpaceBetween,\n                        verticalAlignment = Alignment.Top\n                    ) {\n                        Column(modifier = Modifier.weight(1f)) {\n                            Text(\n                                text = "通用图像工坊",\n                                color = MaterialTheme.colorScheme.onSurface,\n                                fontSize = 28.sp,\n                                fontWeight = FontWeight.Bold\n                            )\n                            Spacer(Modifier.height(6.dp))\n                            Text(\n                                text = "首页聚焦任务创建，接口配置移入二级页面，交互更轻量",\n                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),\n                                style = MaterialTheme.typography.bodyMedium\n                            )\n                        }\n                        Column(horizontalAlignment = Alignment.End) {\n                            TextButton(onClick = { showReferenceSheet = true }) {\n                                Text("参考图", color = MaterialTheme.colorScheme.onSurface)\n                            }\n                            TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {\n                                Text("接口设置", color = MaterialTheme.colorScheme.onSurface)\n                            }\n                        }\n                    }\n                }\n\n                item {\n                    ElevatedCard(\n                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),\n                        shape = RoundedCornerShape(24.dp)\n                    ) {\n                        Column(\n                            modifier = Modifier.padding(18.dp),\n                            verticalArrangement = Arrangement.spacedBy(14.dp)\n                        ) {\n                            SectionTitle("创建任务", "首页只保留核心创作流程，接口与模型请到二级设置页维护")\n                            Card(\n                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),\n                                shape = RoundedCornerShape(18.dp)\n                            ) {\n                                Row(\n                                    modifier = Modifier\n                                        .fillMaxWidth()\n                                        .padding(horizontal = 14.dp, vertical = 12.dp),\n                                    horizontalArrangement = Arrangement.SpaceBetween,\n                                    verticalAlignment = Alignment.CenterVertically\n                                ) {\n                                    Column(modifier = Modifier.weight(1f)) {\n                                        Text(\n                                            text = if (selectedImageBytes != null) "当前为图生图 / 编辑" else "当前为文生图",\n                                            fontWeight = FontWeight.SemiBold\n                                        )\n                                        Text(\n                                            text = if (selectedImageBytes != null)\n                                                selectedImage?.lastPathSegment ?: "已选择参考图"\n                                            else\n                                                "未选择参考图，输入描述即可生成",\n                                            style = MaterialTheme.typography.labelSmall,\n                                            color = Color(0xFF6B7280),\n                                            maxLines = 1,\n                                            overflow = TextOverflow.Ellipsis\n                                        )\n                                    }\n                                    TextButton(onClick = { showReferenceSheet = true }) {\n                                        Text("参考图")\n                                    }\n                                }\n                            }\n\n                            OutlinedTextField(\n                                value = prompt,\n                                onValueChange = { prompt = it },\n                                label = { Text(if (editMode) "编辑指令" else "图片描述 Prompt") },\n                                placeholder = {\n                                    Text(\n                                        if (editMode)\n                                            "例如：保留主体不变，改成赛博朋克夜景，增强霓虹反射"\n                                        else\n                                            "例如：一只穿宇航服的橘猫，电影感灯光，超细节"\n                                    )\n                                },\n                                modifier = Modifier\n                                    .fillMaxWidth()\n                                    .heightIn(min = 140.dp),\n                                shape = RoundedCornerShape(20.dp)\n                            )\n\n                            SectionTitle("尺寸 / 比例", "当前接口按固定尺寸传参，比例与实际分辨率绑定显示，避免误解为可任意组合")\n\n                            AppDropdownField(\n                                title = "尺寸 / 比例",\n                                selected = selectedSizeOption.title + " · " + selectedSizeOption.value,\n                                options = currentSizes.map { "${it.title} · ${it.value}" },\n                                onSelected = { display ->\n                                    currentSizes.firstOrNull {\n                                        "${it.title} · ${it.value}" == display\n                                    }?.let { size = it.value }\n                                }\n                            )\n\n                            TextButton(onClick = { showAdvancedOptions = !showAdvancedOptions }) {\n                                Text(if (showAdvancedOptions) "收起高级参数" else "展开高级参数")\n                            }\n\n                            if (showAdvancedOptions) {\n                                InfoCard(\n                                    title = "尺寸说明",\n                                    content = ratioGuide.joinToString("\n")\n                                )\n\n                                AppDropdownField(\n                                    title = "画质",\n                                    selected = quality,\n                                    options = qualityOptions,\n                                    onSelected = { quality = it }\n                                )\n\n                                AppDropdownField(\n                                    title = "输出格式",\n                                    selected = outputFormat,\n                                    options = outputFormats,\n                                    onSelected = { outputFormat = it }\n                                )\n\n                                AppDropdownField(\n                                    title = "背景",\n                                    selected = background,\n                                    options = backgroundOptions,\n                                    onSelected = { background = it }\n                                )\n\n                                AppDropdownField(\n                                    title = "生成数量",\n                                    selected = count,\n                                    options = (1..10).map { it.toString() },\n                                    onSelected = { count = it }\n                                )\n                            }\n\n                            if (isLoading) {\n                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())\n                            }\n\n                            Button(\n                                enabled = !isLoading,\n                                onClick = {\n                                    scope.launch {\n                                        isLoading = true\n                                        status = "请求已发送，图像生成通常需要 30~180 秒。"\n                                        try {\n                                            val result = withContext(Dispatchers.IO) {\n                                                if (selectedImageBytes != null) {\n                                                    when (apiMode) {\n                                                        ApiMode.IMAGES -> callEdit(\n                                                            baseUrl = baseUrl,\n                                                            apiKey = apiKey,\n                                                            model = editModel,\n                                                            prompt = prompt,\n                                                            imageBytes = selectedImageBytes,\n                                                            size = size,\n                                                            quality = quality,\n                                                            outputFormat = outputFormat,\n                                                            background = background\n                                                        )\n\n                                                        ApiMode.RESPONSES -> callEditResponses(\n                                                            baseUrl = baseUrl,\n                                                            apiKey = apiKey,\n                                                            model = editModel,\n                                                            prompt = prompt,\n                                                            imageBytes = selectedImageBytes,\n                                                            size = size,\n                                                            quality = quality,\n                                                            outputFormat = outputFormat,\n                                                            background = background\n                                                        )\n\n                                                        ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(\n                                                            model = editModel,\n                                                            prompt = prompt,\n                                                            imageBytes = selectedImageBytes,\n                                                            baseUrl = baseUrl,\n                                                            apiKey = apiKey,\n                                                            size = size,\n                                                            quality = quality\n                                                        )\n                                                    }\n                                                } else {\n                                                    callGenerate(\n                                                        baseUrl = baseUrl,\n                                                        apiKey = apiKey,\n                                                        model = generateModel,\n                                                        prompt = prompt,\n                                                        n = count.toIntOrNull() ?: 1,\n                                                        size = size,\n                                                        quality = quality\n                                                    )\n                                                }\n                                            }\n                                            imageBytes = result\n                                            val saved = saveToGallery(context, result, outputFormat)\n                                            val item = HistoryItem(\n                                                time = now(),\n                                                mode = if (selectedImageBytes != null) "edit" else "generate",\n                                                model = if (selectedImageBytes != null) editModel else generateModel,\n                                                prompt = prompt,\n                                                path = saved\n                                            )\n                                            history = listOf(item) + history.take(29)\n                                            saveHistory(prefs, history)\n                                            status = "生成完成，已保存到相册：$saved"\n                                        } catch (e: Exception) {\n                                            status = "生成失败：${e.message}"\n                                        } finally {\n                                            isLoading = false\n                                        }\n                                    }\n                                },\n                                modifier = Modifier.fillMaxWidth()\n                            ) {\n                                Text(if (isLoading) "正在生成..." else if (selectedImageBytes != null) "开始编辑图像" else "开始生成图像")\n                            }\n\n                            StatusCard(status)\n                        }\n                    }\n                }\n\n                imageBytes?.let { bytes ->\n                    item {\n                        val bitmap = remember(bytes) {\n                            decodePreviewBitmap(bytes)\n                        }\n                        if (bitmap != null) {\n                            ElevatedCard(\n                                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),\n                                shape = RoundedCornerShape(24.dp)\n                            ) {\n                                Column(\n                                    modifier = Modifier.padding(18.dp),\n                                    verticalArrangement = Arrangement.spacedBy(12.dp)\n                                ) {\n                                    SectionTitle("结果预览", "生成完成后自动显示并写入系统相册")\n                                    Box(\n                                        modifier = Modifier\n                                            .fillMaxWidth()\n                                            .clip(RoundedCornerShape(20.dp))\n                                            .background(Color.White)\n                                            .border(1.dp, Color(0xFFD9E1F5), RoundedCornerShape(20.dp))\n                                            .padding(8.dp)\n                                    ) {\n                                        Image(\n                                            bitmap = bitmap.asImageBitmap(),\n                                            contentDescription = null,\n                                            modifier = Modifier\n                                                .fillMaxWidth()\n                                                .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())\n                                        )\n                                    }\n                                }\n                            }\n                        }\n                    }\n                }\n\n            }\n        }\n\n        ScreenRoute.HISTORY -> Scaffold(\n            containerColor = MaterialTheme.colorScheme.surface,\n            bottomBar = {\n                BottomNavigationBar(\n                    currentRoute = currentRoute,\n                    onRouteSelected = { currentRoute = it }\n                )\n            }\n        ) { padding ->\n            LazyColumn(\n                modifier = Modifier\n                    .fillMaxSize()\n                    .padding(padding),\n                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),\n                verticalArrangement = Arrangement.spacedBy(12.dp)\n            ) {\n                item {\n                    Row(\n                        modifier = Modifier\n                            .fillMaxWidth()\n                            .padding(horizontal = 4.dp, vertical = 6.dp),\n                        horizontalArrangement = Arrangement.SpaceBetween,\n                        verticalAlignment = Alignment.CenterVertically\n                    ) {\n                        Column {\n                            Text("历史记录", fontSize = 26.sp, fontWeight = FontWeight.Bold)\n                            Text("最近生成与编辑结果", color = Color(0xFF6B7280))\n                        }\n                        TextButton(onClick = {\n                            history = emptyList()\n                            saveHistory(prefs, history)\n                            status = "历史记录已清空。"\n                        }) {\n                            Text("清空")\n                        }\n                    }\n                }\n                if (history.isEmpty()) {\n                    item {\n                        ElevatedCard(\n                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),\n                            shape = RoundedCornerShape(24.dp)\n                        ) {\n                            Text(\n                                "暂无历史记录",\n                                modifier = Modifier.padding(18.dp),\n                                color = Color.Gray\n                            )\n                        }\n                    }\n                } else {\n                    items(history.take(30)) { item ->\n                        HistoryCard(item)\n                    }\n                }\n            }\n        }\n    }\n}\n\n@Composable\nprivate fun BottomNavigationBar(\n    currentRoute: ScreenRoute,\n    onRouteSelected: (ScreenRoute) -> Unit\n) {\n    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {\n        NavigationBarItem(\n            selected = currentRoute == ScreenRoute.MAIN,\n            onClick = { onRouteSelected(ScreenRoute.MAIN) },\n            icon = { Text("创") },\n            label = { Text("创作") }\n        )\n        NavigationBarItem(\n            selected = currentRoute == ScreenRoute.HISTORY,\n            onClick = { onRouteSelected(ScreenRoute.HISTORY) },\n            icon = { Text("历") },\n            label = { Text("历史") }\n        )\n        NavigationBarItem(\n            selected = currentRoute == ScreenRoute.SETTINGS,\n            onClick = { onRouteSelected(ScreenRoute.SETTINGS) },\n            icon = { Text("设") },\n            label = { Text("设置") }\n        )\n    }\n}\n\n@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nprivate fun SettingsScreen(\n    baseUrl: String,\n    apiKey: String,\n    apiMode: ApiMode,\n    customGenerateModel: String,\n    currentGenerateModel: String,\n    customEditModel: String,\n    currentEditModel: String,\n    recommendedModels: List<String>,\n    onBaseUrlChange: (String) -> Unit,\n    onApiKeyChange: (String) -> Unit,\n    onApiModeChange: (ApiMode) -> Unit,\n    onCustomGenerateModelChange: (String) -> Unit,\n    onSelectGenerateModel: (String) -> Unit,\n    onCustomEditModelChange: (String) -> Unit,\n    onSelectEditModel: (String) -> Unit,\n    settingsNotice: String,\n    onBack: () -> Unit,\n    onClearConfig: () -> Unit,\n    onSave: () -> Unit,\n    outerPadding: PaddingValues = PaddingValues()\n) {\n    Scaffold(\n        containerColor = pageBg,\n        topBar = {\n            TopAppBar(\n                title = { Text("接口设置") },\n                navigationIcon = {\n                    TextButton(onClick = onBack) { Text("返回") }\n                },\n                colors = TopAppBarDefaults.topAppBarColors(containerColor = pageBg)\n            )\n        }\n    ) { padding ->\n        Column(\n            modifier = Modifier\n                .fillMaxSize()\n                .padding(padding)\n                .padding(outerPadding)\n                .verticalScroll(rememberScrollState())\n                .padding(horizontal = 16.dp, vertical = 18.dp)\n                .navigationBarsPadding(),\n            verticalArrangement = Arrangement.spacedBy(16.dp)\n        ) {\n            ElevatedCard(\n                colors = CardDefaults.elevatedCardColors(containerColor = cardBg),\n                shape = RoundedCornerShape(28.dp)\n            ) {\n                Column(\n                    modifier = Modifier.padding(18.dp),\n                    verticalArrangement = Arrangement.spacedBy(14.dp)\n                ) {\n                    SectionTitle("连接配置", "填写接口地址、密钥与模型参数")\n\n                    OutlinedTextField(\n                        value = baseUrl,\n                        onValueChange = onBaseUrlChange,\n                        label = { Text("Base URL") },\n                        placeholder = { Text("例如：https://api.openai.com/v1") },\n                        singleLine = true,\n                        modifier = Modifier.fillMaxWidth(),\n                        shape = RoundedCornerShape(18.dp)\n                    )\n\n                    OutlinedTextField(\n                        value = apiKey,\n                        onValueChange = onApiKeyChange,\n                        label = { Text("API Key") },\n                        placeholder = { Text("输入你的密钥") },\n                        visualTransformation = PasswordVisualTransformation(),\n                        singleLine = true,\n                        modifier = Modifier.fillMaxWidth(),\n                        shape = RoundedCornerShape(18.dp)\n                    )\n\n                    AppDropdownField(\n                        title = "接口模式",\n                        selected = apiMode.label,\n                        options = ApiMode.entries.map { it.label },\n                        onSelected = { label ->\n                            ApiMode.entries.firstOrNull { it.label == label }?.let(onApiModeChange)\n                        }\n                    )\n\n                    AppEditableDropdownField(\n                        title = "文生图模型 ID",\n                        value = customGenerateModel,\n                        options = recommendedModels,\n                        placeholder = "可手动输入，也可从推荐模型中选择",\n                        onValueChange = onCustomGenerateModelChange,\n                        onSelected = onSelectGenerateModel\n                    )\n\n                    AppEditableDropdownField(\n                        title = "图生图模型 ID",\n                        value = customEditModel,\n                        options = recommendedModels,\n                        placeholder = "可手动输入，也可从推荐模型中选择",\n                        onValueChange = onCustomEditModelChange,\n                        onSelected = onSelectEditModel\n                    )\n\n                    Button(\n                        onClick = onSave,\n                        modifier = Modifier.fillMaxWidth()\n                    ) {\n                        Text("保存接口设置")\n                    }\n\n                    TextButton(\n                        onClick = onClearConfig,\n                        modifier = Modifier.fillMaxWidth()\n                    ) {\n                        Text("清除密钥、配置和历史记录")\n                    }\n\n                    if (settingsNotice.isNotBlank()) {\n                        StatusCard(settingsNotice)\n                    }\n                }\n            }\n        }\n    }\n}\n\n@Composable\nprivate fun SectionTitle(title: String, desc: String) {\n    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {\n        Text(\n            text = title,\n            style = MaterialTheme.typography.titleLarge,\n            fontWeight = FontWeight.Bold\n        )\n        Text(\n            text = desc,\n            style = MaterialTheme.typography.bodySmall,\n            color = Color(0xFF6B7280)\n        )\n    }\n}\n\n@Composable\nprivate fun InfoCard(title: String, content: String) {\n    Card(\n        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),\n        shape = RoundedCornerShape(18.dp)\n    ) {\n        Column(\n            modifier = Modifier.padding(14.dp),\n            verticalArrangement = Arrangement.spacedBy(6.dp)\n        ) {\n            Text(\n                text = title,\n                color = MaterialTheme.colorScheme.primary,\n                fontWeight = FontWeight.SemiBold,\n                style = MaterialTheme.typography.labelLarge\n            )\n            Text(\n                text = content,\n                style = MaterialTheme.typography.bodyMedium\n            )\n        }\n    }\n}\n\n@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nprivate fun AppDropdownField(\n    title: String,\n    selected: String,\n    options: List<String>,\n    onSelected: (String) -> Unit\n) {\n    var expanded by remember { mutableStateOf(false) }\n\n    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {\n        Text(\n            text = title,\n            style = MaterialTheme.typography.labelLarge,\n            fontWeight = FontWeight.SemiBold\n        )\n        ExposedDropdownMenuBox(\n            expanded = expanded,\n            onExpandedChange = { expanded = !expanded }\n        ) {\n            OutlinedTextField(\n                value = selected,\n                onValueChange = {},\n                readOnly = true,\n                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },\n                modifier = Modifier\n                    .menuAnchor()\n                    .fillMaxWidth(),\n                shape = RoundedCornerShape(18.dp)\n            )\n            ExposedDropdownMenu(\n                expanded = expanded,\n                onDismissRequest = { expanded = false }\n            ) {\n                options.forEach { option ->\n                    DropdownMenuItem(\n                        text = {\n                            Text(\n                                text = option,\n                                maxLines = 1,\n                                overflow = TextOverflow.Ellipsis\n                            )\n                        },\n                        onClick = {\n                            onSelected(option)\n                            expanded = false\n                        }\n                    )\n                }\n            }\n        }\n    }\n}\n\n@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nprivate fun AppEditableDropdownField(\n    title: String,\n    value: String,\n    options: List<String>,\n    placeholder: String,\n    onValueChange: (String) -> Unit,\n    onSelected: (String) -> Unit\n) {\n    var expanded by remember { mutableStateOf(false) }\n\n    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {\n        Text(\n            text = title,\n            style = MaterialTheme.typography.labelLarge,\n            fontWeight = FontWeight.SemiBold\n        )\n        ExposedDropdownMenuBox(\n            expanded = expanded,\n            onExpandedChange = { expanded = !expanded }\n        ) {\n            OutlinedTextField(\n                value = value,\n                onValueChange = onValueChange,\n                placeholder = { Text(placeholder) },\n                singleLine = true,\n                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },\n                modifier = Modifier\n                    .menuAnchor()\n                    .fillMaxWidth(),\n                shape = RoundedCornerShape(18.dp)\n            )\n            ExposedDropdownMenu(\n                expanded = expanded,\n                onDismissRequest = { expanded = false }\n            ) {\n                options.forEach { option ->\n                    DropdownMenuItem(\n                        text = {\n                            Text(\n                                text = option,\n                                maxLines = 1,\n                                overflow = TextOverflow.Ellipsis\n                            )\n                        },\n                        onClick = {\n                            onSelected(option)\n                            expanded = false\n                        }\n                    )\n                }\n            }\n        }\n    }\n}\n\n@Composable\nprivate fun StatusCard(status: String) {\n    val isError = status.contains("失败") || status.contains("HTTP")\n    val bg = if (isError) errorBg else successBg\n    val fg = if (isError) errorText else successText\n\n    Row(\n        modifier = Modifier\n            .fillMaxWidth()\n            .clip(RoundedCornerShape(16.dp))\n            .background(bg)\n            .padding(12.dp),\n        horizontalArrangement = Arrangement.spacedBy(10.dp),\n        verticalAlignment = Alignment.CenterVertically\n    ) {\n        Box(\n            modifier = Modifier\n                .size(10.dp)\n                .clip(CircleShape)\n                .background(fg)\n        )\n        Text(\n            text = status,\n            color = fg,\n            style = MaterialTheme.typography.bodyMedium\n        )\n    }\n}\n\n@Composable\nprivate fun HistoryCard(item: HistoryItem) {\n    Column(\n        modifier = Modifier.padding(vertical = 4.dp),\n        verticalArrangement = Arrangement.spacedBy(4.dp)\n    ) {\n        Text(\n            text = "${item.time} · ${item.mode}",\n            style = MaterialTheme.typography.labelMedium,\n            color = accent\n        )\n        Text(\n            text = item.model,\n            style = MaterialTheme.typography.bodyMedium,\n            fontWeight = FontWeight.SemiBold\n        )\n        Text(\n            text = item.prompt,\n            style = MaterialTheme.typography.bodySmall,\n            maxLines = 3,\n            overflow = TextOverflow.Ellipsis\n        )\n        Text(\n            text = item.path,\n            style = MaterialTheme.typography.labelSmall,\n            color = Color.Gray\n        )\n    }\n}\n\nfun decodePreviewBitmap(bytes: ByteArray, maxSide: Int = 1600) =\n    BitmapFactory.Options().run {\n        inJustDecodeBounds = true\n        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, this)\n\n        var sample = 1\n        while ((outWidth / sample) > maxSide || (outHeight / sample) > maxSide) {\n            sample *= 2\n        }\n\n        inJustDecodeBounds = false\n        inSampleSize = sample.coerceAtLeast(1)\n        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, this)\n    }\n\nfun endpoint(baseUrl: String, path: String): String {\n    val b = baseUrl.trim().trimEnd('/')\n    return if (b.endsWith("/v1")) "$b$path" else "$b/v1$path"\n}\n\nfun readAllBytes(context: Context, imageUri: Uri): ByteArray =\n    context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }\n        ?: error("无法读取参考图")\n\nfun callGenerate(\n    baseUrl: String,\n    apiKey: String,\n    model: String,\n    prompt: String,\n    n: Int,\n    size: String,\n    quality: String\n): ByteArray {\n    require(apiKey.isNotBlank()) { "请填写 API Key" }\n    require(prompt.isNotBlank()) { "请填写 Prompt" }\n\n    val body = JSONObject()\n        .put("model", model.trim())\n        .put("prompt", prompt)\n        .put("n", n.coerceIn(1, 10))\n        .put("size", size)\n        .put("quality", quality)\n\n    val conn = URL(endpoint(baseUrl, "/images/generations")).openConnection() as HttpURLConnection\n    conn.requestMethod = "POST"\n    conn.connectTimeout = 30000\n    conn.readTimeout = 180000\n    conn.doOutput = true\n    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")\n    conn.setRequestProperty("Content-Type", "application/json")\n    conn.outputStream.use { it.write(body.toString().toByteArray()) }\n    return parseImageResponse(conn)\n}\n\nfun callEdit(\n    baseUrl: String,\n    apiKey: String,\n    model: String,\n    prompt: String,\n    imageBytes: ByteArray?,\n    size: String,\n    quality: String,\n    outputFormat: String,\n    background: String\n): ByteArray {\n    require(apiKey.isNotBlank()) { "请填写 API Key" }\n    require(prompt.isNotBlank()) { "请填写编辑指令" }\n    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }\n\n    val boundary = "----AndroidBoundary${UUID.randomUUID()}"\n    val conn = URL(endpoint(baseUrl, "/images/edits")).openConnection() as HttpURLConnection\n    conn.requestMethod = "POST"\n    conn.connectTimeout = 30000\n    conn.readTimeout = 180000\n    conn.doOutput = true\n    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")\n    conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")\n\n    conn.outputStream.use { out ->\n        fun field(name: String, value: String) {\n            out.write("--$boundary\r\n".toByteArray())\n            out.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n".toByteArray())\n        }\n\n        field("model", model.trim())\n        field("prompt", prompt)\n        field("size", size)\n        field("quality", quality)\n        field("output_format", outputFormat)\n        if (background.isNotBlank()) field("background", background)\n\n        out.write("--$boundary\r\n".toByteArray())\n        out.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r\n".toByteArray())\n        out.write("Content-Type: image/png\r\n\r\n".toByteArray())\n        out.write(sourceImageBytes)\n        out.write("\r\n--$boundary--\r\n".toByteArray())\n    }\n    return parseImageResponse(conn)\n}\n\nfun callEditGenerationsCompat(\n    baseUrl: String,\n    apiKey: String,\n    model: String,\n    prompt: String,\n    imageBytes: ByteArray?,\n    size: String,\n    quality: String\n): ByteArray {\n    require(apiKey.isNotBlank()) { "请填写 API Key" }\n    require(prompt.isNotBlank()) { "请填写编辑指令" }\n    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }\n\n    val inputImageDataUrl = buildCompactImageDataUrl(sourceImageBytes)\n\n    val compatPrompt = """\n        $prompt\n\n        Reference image is provided in the request image fields. Use it as the visual reference for this edit.\n    """.trimIndent()\n\n    val body = JSONObject()\n        .put("model", model.trim())\n        .put("prompt", compatPrompt)\n        .put("n", 1)\n        .put("size", size)\n        .put("quality", quality)\n        .put("image", inputImageDataUrl)\n        .put("reference_image", inputImageDataUrl)\n\n    val jsonBody = body.toString()\n    val conn = URL(endpoint(baseUrl, "/images/generations")).openConnection() as HttpURLConnection\n    conn.requestMethod = "POST"\n    conn.connectTimeout = 30000\n    conn.readTimeout = 180000\n    conn.doOutput = true\n    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")\n    conn.setRequestProperty("Content-Type", "application/json")\n    conn.outputStream.use { it.write(jsonBody.toByteArray()) }\n    return parseImageResponse(conn)\n}\n\nfun buildCompactImageDataUrl(\n    originalBytes: ByteArray,\n    maxSide: Int = 1536,\n    jpegQuality: Int = 86,\n    maxEncodedBytes: Int = 6 * 1024 * 1024\n): String {\n    val bounds = BitmapFactory.Options().apply {\n        inJustDecodeBounds = true\n    }\n    BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size, bounds)\n\n    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "参考图格式无法识别" }\n\n    var sampleSize = 1\n    while ((bounds.outWidth / sampleSize) > maxSide || (bounds.outHeight / sampleSize) > maxSide) {\n        sampleSize *= 2\n    }\n\n    val options = BitmapFactory.Options().apply {\n        inSampleSize = sampleSize.coerceAtLeast(1)\n        inPreferredConfig = Bitmap.Config.RGB_565\n    }\n\n    val bitmap = BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size, options)\n        ?: error("参考图解码失败")\n\n    val output = ByteArrayOutputStream()\n    try {\n        bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality.coerceIn(60, 95), output)\n    } finally {\n        bitmap.recycle()\n    }\n\n    val compactBytes = output.toByteArray()\n    require(compactBytes.size <= maxEncodedBytes) {\n        "参考图过大，已阻止以避免内存溢出。请先裁剪或压缩图片后再使用 Generations 兼容模式。"\n    }\n\n    return "data:image/jpeg;base64," + Base64.encodeToString(compactBytes, Base64.NO_WRAP)\n}\n\nfun callEditResponses(\n    baseUrl: String,\n    apiKey: String,\n    model: String,\n    prompt: String,\n    imageBytes: ByteArray?,\n    size: String,\n    quality: String,\n    outputFormat: String,\n    background: String\n): ByteArray {\n    require(apiKey.isNotBlank()) { "请填写 API Key" }\n    require(prompt.isNotBlank()) { "请填写编辑指令" }\n    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }\n\n    val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(sourceImageBytes, Base64.NO_WRAP)\n\n    val inputContent = JSONArray().apply {\n        put(JSONObject().put("type", "input_text").put("text", "Use the following text as the complete prompt. Do not rewrite it:\n$prompt"))\n        put(JSONObject().put("type", "input_image").put("image_url", inputImageDataUrl))\n    }\n\n    val tool = JSONObject()\n        .put("type", "image_generation")\n        .put("action", "edit")\n        .put("size", size)\n        .put("quality", quality)\n        .put("output_format", outputFormat)\n\n    if (background.isNotBlank()) {\n        tool.put("background", background)\n    }\n\n    val body = JSONObject()\n        .put("model", model.trim())\n        .put(\n            "input",\n            JSONArray().put(\n                JSONObject()\n                    .put("role", "user")\n                    .put("content", inputContent)\n            )\n        )\n        .put("tools", JSONArray().put(tool))\n        .put("tool_choice", "required")\n\n    val conn = URL(endpoint(baseUrl, "/responses")).openConnection() as HttpURLConnection\n    conn.requestMethod = "POST"\n    conn.connectTimeout = 30000\n    conn.readTimeout = 180000\n    conn.doOutput = true\n    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")\n    conn.setRequestProperty("Content-Type", "application/json")\n    conn.outputStream.use { it.write(body.toString().toByteArray()) }\n    return parseResponsesImageResponse(conn, outputFormat)\n}\n\nfun parseImageResponse(conn: HttpURLConnection): ByteArray {\n    val code = conn.responseCode\n    val stream = if (code in 200..299) conn.inputStream else conn.errorStream ?: conn.inputStream\n    val text = stream.bufferedReader().use { it.readText() }\n    if (code !in 200..299) error("HTTP $code: $text")\n\n    val data = JSONObject(text).optJSONArray("data") ?: error("响应缺少 data")\n    val first = data.optJSONObject(0) ?: error("响应 data 为空")\n    val b64 = first.optString("b64_json", "")\n    if (b64.isNotBlank()) return Base64.decode(b64, Base64.DEFAULT)\n\n    val url = first.optString("url", "")\n    if (url.isNotBlank()) return download(url)\n\n    error("响应中既没有 url 也没有 b64_json")\n}\n\nfun parseResponsesImageResponse(conn: HttpURLConnection, outputFormat: String): ByteArray {\n    val code = conn.responseCode\n    val stream = if (code in 200..299) conn.inputStream else conn.errorStream ?: conn.inputStream\n    val text = stream.bufferedReader().use { it.readText() }\n    if (code !in 200..299) error("HTTP $code: $text")\n\n    val output = JSONObject(text).optJSONArray("output") ?: error("响应缺少 output")\n    for (index in 0 until output.length()) {\n        val item = output.optJSONObject(index) ?: continue\n        if (item.optString("type") != "image_generation_call") continue\n\n        val result = item.optString("result", "")\n        if (result.isNotBlank()) {\n            val pureBase64 = result.removePrefix("data:image/png;base64,")\n                .removePrefix("data:image/jpeg;base64,")\n                .removePrefix("data:image/webp;base64,")\n            return Base64.decode(pureBase64, Base64.DEFAULT)\n        }\n    }\n\n    for (index in 0 until output.length()) {\n        val item = output.optJSONObject(index) ?: continue\n        if (item.optString("type") != "image_generation_call") continue\n\n        val resultUrl = item.optString("url", "")\n        if (resultUrl.isNotBlank()) {\n            return download(resultUrl)\n        }\n\n        val nested = item.optJSONObject("result")\n        val nestedUrl = nested?.optString("url", "") ?: ""\n        if (nestedUrl.isNotBlank()) {\n            return download(nestedUrl)\n        }\n\n        val nestedB64 = nested?.optString("b64_json", "") ?: ""\n        if (nestedB64.isNotBlank()) {\n            return Base64.decode(nestedB64, Base64.DEFAULT)\n        }\n    }\n\n    error("Responses API 未返回可用图片数据（既没有 result/base64，也没有 url）")\n}\n\nfun download(url: String): ByteArray {\n    val conn = URL(url).openConnection() as HttpURLConnection\n    conn.connectTimeout = 30000\n    conn.readTimeout = 180000\n    return conn.inputStream.use { it.readBytes() }\n}\n\nfun saveToGallery(context: Context, bytes: ByteArray, format: String): String {\n    val ext = if (format == "jpeg") "jpg" else format\n    val name = "image_${System.currentTimeMillis()}.$ext"\n    val values = ContentValues().apply {\n        put(MediaStore.Images.Media.DISPLAY_NAME, name)\n        put(MediaStore.Images.Media.MIME_TYPE, "image/$ext")\n        put(\n            MediaStore.Images.Media.RELATIVE_PATH,\n            Environment.DIRECTORY_PICTURES + "/UniversalImageStudio"\n        )\n    }\n    val uri = context.contentResolver.insert(\n        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,\n        values\n    ) ?: error("无法创建图片文件")\n    context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }\n    return uri.toString()\n}\n\nfun now(): String =\n    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())\n\n\nfun secureConfigPreferences(context: Context): android.content.SharedPreferences {\n    val legacyPrefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)\n\n    val masterKey = MasterKey.Builder(context)\n        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)\n        .build()\n\n    val securePrefs = EncryptedSharedPreferences.create(\n        context,\n        "secure_config",\n        masterKey,\n        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,\n        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM\n    )\n\n    if (!securePrefs.getBoolean("secureMigratedFromV16", false)) {\n        val editor = securePrefs.edit()\n        val keys = listOf("baseUrl", "apiKey", "apiMode", "generateModel", "editModel", "model", "history")\n        keys.forEach { key ->\n            val value = legacyPrefs.getString(key, null)\n            if (value != null) editor.putString(key, value)\n        }\n        editor.putBoolean("secureMigratedFromV16", true).apply()\n\n        legacyPrefs.edit()\n            .remove("baseUrl")\n            .remove("apiKey")\n            .remove("apiMode")\n            .remove("generateModel")\n            .remove("editModel")\n            .remove("model")\n            .remove("history")\n            .apply()\n    }\n\n    return securePrefs\n}\n\nfun loadHistory(prefs: android.content.SharedPreferences): List<HistoryItem> {\n    val arr = JSONArray(prefs.getString("history", "[]") ?: "[]")\n    return (0 until arr.length()).mapNotNull { i ->\n        arr.optJSONObject(i)?.let {\n            HistoryItem(\n                it.optString("time"),\n                it.optString("mode"),\n                it.optString("model"),\n                it.optString("prompt"),\n                it.optString("path")\n            )\n        }\n    }\n}\n\nfun saveHistory(prefs: android.content.SharedPreferences, items: List<HistoryItem>) {\n    val arr = JSONArray()\n    items.forEach {\n        arr.put(\n            JSONObject()\n                .put("time", it.time)\n                .put("mode", it.mode)\n                .put("model", it.model)\n                .put("prompt", it.prompt)\n                .put("path", it.path)\n        )\n    }\n    prefs.edit().putString("history", arr.toString()).apply()\n}\n\n
+package com.operit.hohyaiimage
+
+import android.content.ContentValues
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color as AndroidColor
+import android.net.Uri
+import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Base64
+import androidx.activity.ComponentActivity
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.operit.hohyaiimage.ui.theme.AppTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                AndroidColor.TRANSPARENT,
+                AndroidColor.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                AndroidColor.TRANSPARENT,
+                AndroidColor.TRANSPARENT
+            )
+        )
+        setContent { AppTheme { MainScreen() } }
+    }
+}
+
+private enum class ScreenRoute {
+    MAIN,
+    HISTORY,
+    SETTINGS
+}
+
+private enum class ApiMode(val value: String, val label: String) {
+    IMAGES("images", "Images API"),
+    RESPONSES("responses", "Responses API"),
+    GENERATIONS_EDIT("generations_edit", "Generations 图生图兼容");
+
+    companion object {
+        fun from(value: String?): ApiMode =
+            entries.firstOrNull { it.value == value } ?: IMAGES
+    }
+}
+
+data class HistoryItem(
+    val time: String,
+    val mode: String,
+    val model: String,
+    val prompt: String,
+    val path: String
+)
+
+data class SizeOption(
+    val value: String,
+    val title: String,
+    val desc: String
+)
+
+private val imageModels = listOf(
+    "gpt-image-2",
+    "gpt-image-1",
+    "gpt-image-1.5",
+    "gpt-image-1-mini",
+    "gpt-image-1-high",
+    "gpt-image-1-hd",
+    "prime/gpt-image-2",
+    "mix/gpt-image-2"
+)
+
+private val generationSizes = listOf(
+    SizeOption("1024x1024", "1:1 方图", "标准正方形，通用首选"),
+    SizeOption("1536x1024", "3:2 横图", "适合封面、壁纸横构图"),
+    SizeOption("1024x1536", "2:3 竖图", "适合头像、海报竖构图"),
+    SizeOption("2048x1536", "4:3 横图", "经典横向比例，适合相机/封面构图"),
+    SizeOption("1536x2048", "3:4 竖图", "经典竖向比例，适合人物、头像和手机阅读场景"),
+    SizeOption("2048x1152", "16:9 横图", "适合横屏、桌面壁纸、视频封面"),
+    SizeOption("1152x2048", "9:16 竖图", "适合手机壁纸、竖屏海报"),
+    SizeOption("2048x2048", "1:1 高清方图", "更高细节，更耗时"),
+    SizeOption("4096x4096", "1:1 4K 方图", "超高分辨率，适合精修"),
+    SizeOption("4096x2304", "16:9 4K 横图", "适合桌面壁纸"),
+    SizeOption("2304x4096", "9:16 4K 竖图", "适合手机壁纸")
+)
+
+private val editSizes = listOf(
+    SizeOption("1024x1024", "1:1 方图", "编辑稳定、兼容性最好"),
+    SizeOption("1536x1024", "3:2 横图", "横向延展"),
+    SizeOption("1024x1536", "2:3 竖图", "纵向延展"),
+    SizeOption("2048x1536", "4:3 横图", "经典横向编辑比例"),
+    SizeOption("1536x2048", "3:4 竖图", "经典竖向编辑比例"),
+    SizeOption("2048x1152", "16:9 横图", "横屏编辑比例"),
+    SizeOption("1152x2048", "9:16 竖图", "竖屏编辑比例"),
+    SizeOption("2048x2048", "1:1 高清方图", "高细节编辑")
+)
+
+private val qualityOptions = listOf("auto", "low", "medium", "high")
+private val outputFormats = listOf("png", "jpeg", "webp")
+private val backgroundOptions = listOf("auto", "transparent", "opaque")
+
+private val ratioGuide = listOf(
+    "1:1 → 1024x1024 / 2048x2048 / 4096x4096",
+    "3:2 → 1536x1024",
+    "2:3 → 1024x1536",
+    "4:3 → 2048x1536",
+    "3:4 → 1536x2048",
+    "16:9 → 2048x1152 / 4096x2304",
+    "9:16 → 1152x2048 / 2304x4096"
+)
+
+private val pageBg = Color(0xFFF4F6FB)
+private val cardBg = Color(0xFFF8FAFF)
+private val heroStart = Color(0xFF4E67A8)
+private val accent = Color(0xFF4B63B3)
+private val softAccent = Color(0xFFE8EEFF)
+private val successBg = Color(0xFFE9F7EF)
+private val successText = Color(0xFF1E7B4D)
+private val errorBg = Color(0xFFFFECEC)
+private val errorText = Color(0xFFC03B3B)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { secureConfigPreferences(context) }
+
+    var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
+
+    BackHandler(enabled = currentRoute != ScreenRoute.MAIN) {
+        currentRoute = ScreenRoute.MAIN
+    }
+
+    var baseUrl by rememberSaveable { mutableStateOf(prefs.getString("baseUrl", "https://api.openai.com/v1") ?: "") }
+    var apiKey by rememberSaveable { mutableStateOf(prefs.getString("apiKey", "") ?: "") }
+    var apiMode by rememberSaveable { mutableStateOf(ApiMode.from(prefs.getString("apiMode", ApiMode.IMAGES.value))) }
+    var generateModel by rememberSaveable { mutableStateOf(prefs.getString("generateModel", prefs.getString("model", "gpt-image-2")) ?: "gpt-image-2") }
+    var editModel by rememberSaveable { mutableStateOf(prefs.getString("editModel", "gpt-image-2") ?: "gpt-image-2") }
+    var customGenerateModel by rememberSaveable { mutableStateOf(generateModel) }
+    var customEditModel by rememberSaveable { mutableStateOf(editModel) }
+    var prompt by rememberSaveable { mutableStateOf("") }
+    var size by rememberSaveable { mutableStateOf("1024x1024") }
+    var quality by rememberSaveable { mutableStateOf("auto") }
+    var count by rememberSaveable { mutableStateOf("1") }
+    var outputFormat by rememberSaveable { mutableStateOf("png") }
+    var background by rememberSaveable { mutableStateOf("auto") }
+    var editMode by rememberSaveable { mutableStateOf(false) }
+    var selectedImage by remember { mutableStateOf(null as Uri?) }
+    var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
+    var showReferenceSheet by rememberSaveable { mutableStateOf(false) }
+    val referenceSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var isLoading by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
+    var settingsNotice by remember { mutableStateOf("") }
+    var imageBytes by remember { mutableStateOf(null as ByteArray?) }
+    var history by remember { mutableStateOf(loadHistory(prefs)) }
+    var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
+
+    val currentSizes = if (editMode) editSizes else generationSizes
+    val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()
+
+    LaunchedEffect(selectedImageBytes) {
+        editMode = selectedImageBytes != null
+    }
+
+    LaunchedEffect(editMode) {
+        if (currentSizes.none { it.value == size }) {
+            size = currentSizes.first().value
+        }
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        selectedImage = uri
+        selectedImageBytes = runCatching {
+            uri?.let { readAllBytes(context, it) }
+        }.getOrNull()
+        if (uri != null && selectedImageBytes == null) {
+            status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"
+        }
+        if (selectedImageBytes != null) {
+            showReferenceSheet = false
+            status = "已选择参考图，将自动使用图生图 / 编辑模式。"
+        }
+    }
+
+    if (showReferenceSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showReferenceSheet = false },
+            sheetState = referenceSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                SectionTitle("参考图", "选择参考图后会自动切换为图生图 / 编辑；清除后自动回到文生图")
+                if (selectedImage != null) {
+                    StatusCard(
+                        if (selectedImageBytes != null)
+                            "当前参考图：${selectedImage?.lastPathSegment ?: "已选择图片"}"
+                        else
+                            "已记录参考图 URI，但图片缓存读取失败，请重新选择"
+                    )
+                } else {
+                    Text("当前未选择参考图，将使用文生图模式。", color = Color(0xFF6B7280))
+                }
+                Button(
+                    onClick = { picker.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (selectedImage == null) "选择参考图" else "更换参考图")
+                }
+                OutlinedButton(
+                    onClick = {
+                        selectedImage = null
+                        selectedImageBytes = null
+                        showReferenceSheet = false
+                        status = "已清除参考图，将自动使用文生图模式。"
+                    },
+                    enabled = selectedImage != null || selectedImageBytes != null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("清除参考图，使用文生图")
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+
+    when (currentRoute) {
+        ScreenRoute.SETTINGS -> Scaffold(
+            containerColor = pageBg,
+            bottomBar = {
+                BottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onRouteSelected = { currentRoute = it }
+                )
+            }
+        ) { settingsPadding ->
+            SettingsScreen(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            apiMode = apiMode,
+            customGenerateModel = customGenerateModel,
+            currentGenerateModel = generateModel,
+            customEditModel = customEditModel,
+            currentEditModel = editModel,
+            recommendedModels = imageModels,
+            onBaseUrlChange = { baseUrl = it },
+            onApiKeyChange = { apiKey = it },
+            onApiModeChange = { apiMode = it },
+            onCustomGenerateModelChange = {
+                customGenerateModel = it
+                generateModel = it
+            },
+            onSelectGenerateModel = {
+                generateModel = it
+                customGenerateModel = it
+            },
+            onCustomEditModelChange = {
+                customEditModel = it
+                editModel = it
+            },
+            onSelectEditModel = {
+                editModel = it
+                customEditModel = it
+            },
+            settingsNotice = settingsNotice,
+            onBack = { currentRoute = ScreenRoute.MAIN },
+            onClearConfig = {
+                prefs.edit().clear().apply()
+                baseUrl = "https://api.openai.com/v1"
+                apiKey = ""
+                apiMode = ApiMode.IMAGES
+                generateModel = "gpt-image-2"
+                editModel = "gpt-image-2"
+                customGenerateModel = generateModel
+                customEditModel = editModel
+                history = emptyList()
+                settingsNotice = "已清除接口配置、密钥和历史记录，请重新填写接口设置。"
+                currentRoute = ScreenRoute.SETTINGS
+            },
+            onSave = {
+                prefs.edit()
+                    .putString("baseUrl", baseUrl.trim())
+                    .putString("apiKey", apiKey.trim())
+                    .putString("apiMode", apiMode.value)
+                    .putString("generateModel", generateModel.trim())
+                    .putString("editModel", editModel.trim())
+                    .putString("model", generateModel.trim())
+                    .apply()
+                settingsNotice = "接口设置已保存。"
+                status = "接口设置已保存，可以开始创建图像。"
+                currentRoute = ScreenRoute.MAIN
+            },
+            outerPadding = settingsPadding
+        )
+        }
+
+        ScreenRoute.MAIN -> Scaffold(
+            containerColor = MaterialTheme.colorScheme.surface,
+            bottomBar = {
+                BottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onRouteSelected = { currentRoute = it }
+                )
+            }
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .navigationBarsPadding(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "通用图像工坊",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "首页聚焦任务创建，接口配置移入二级页面，交互更轻量",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            TextButton(onClick = { showReferenceSheet = true }) {
+                                Text("参考图", color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {
+                                Text("接口设置", color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    ElevatedCard(
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            SectionTitle("创建任务", "首页只保留核心创作流程，接口与模型请到二级设置页维护")
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (selectedImageBytes != null) "当前为图生图 / 编辑" else "当前为文生图",
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = if (selectedImageBytes != null)
+                                                selectedImage?.lastPathSegment ?: "已选择参考图"
+                                            else
+                                                "未选择参考图，输入描述即可生成",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF6B7280),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    TextButton(onClick = { showReferenceSheet = true }) {
+                                        Text("参考图")
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = prompt,
+                                onValueChange = { prompt = it },
+                                label = { Text(if (editMode) "编辑指令" else "图片描述 Prompt") },
+                                placeholder = {
+                                    Text(
+                                        if (editMode)
+                                            "例如：保留主体不变，改成赛博朋克夜景，增强霓虹反射"
+                                        else
+                                            "例如：一只穿宇航服的橘猫，电影感灯光，超细节"
+                                    )
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 140.dp),
+                                shape = RoundedCornerShape(20.dp)
+                            )
+
+                            SectionTitle("尺寸 / 比例", "当前接口按固定尺寸传参，比例与实际分辨率绑定显示，避免误解为可任意组合")
+
+                            AppDropdownField(
+                                title = "尺寸 / 比例",
+                                selected = selectedSizeOption.title + " · " + selectedSizeOption.value,
+                                options = currentSizes.map { "${it.title} · ${it.value}" },
+                                onSelected = { display ->
+                                    currentSizes.firstOrNull {
+                                        "${it.title} · ${it.value}" == display
+                                    }?.let { size = it.value }
+                                }
+                            )
+
+                            TextButton(onClick = { showAdvancedOptions = !showAdvancedOptions }) {
+                                Text(if (showAdvancedOptions) "收起高级参数" else "展开高级参数")
+                            }
+
+                            if (showAdvancedOptions) {
+                                InfoCard(
+                                    title = "尺寸说明",
+                                    content = ratioGuide.joinToString("
+")
+                                )
+
+                                AppDropdownField(
+                                    title = "画质",
+                                    selected = quality,
+                                    options = qualityOptions,
+                                    onSelected = { quality = it }
+                                )
+
+                                AppDropdownField(
+                                    title = "输出格式",
+                                    selected = outputFormat,
+                                    options = outputFormats,
+                                    onSelected = { outputFormat = it }
+                                )
+
+                                AppDropdownField(
+                                    title = "背景",
+                                    selected = background,
+                                    options = backgroundOptions,
+                                    onSelected = { background = it }
+                                )
+
+                                AppDropdownField(
+                                    title = "生成数量",
+                                    selected = count,
+                                    options = (1..10).map { it.toString() },
+                                    onSelected = { count = it }
+                                )
+                            }
+
+                            if (isLoading) {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            }
+
+                            Button(
+                                enabled = !isLoading,
+                                onClick = {
+                                    scope.launch {
+                                        isLoading = true
+                                        status = "请求已发送，图像生成通常需要 30~180 秒。"
+                                        try {
+                                            val result = withContext(Dispatchers.IO) {
+                                                if (selectedImageBytes != null) {
+                                                    when (apiMode) {
+                                                        ApiMode.IMAGES -> callEdit(
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
+                                                            model = editModel,
+                                                            prompt = prompt,
+                                                            imageBytes = selectedImageBytes,
+                                                            size = size,
+                                                            quality = quality,
+                                                            outputFormat = outputFormat,
+                                                            background = background
+                                                        )
+
+                                                        ApiMode.RESPONSES -> callEditResponses(
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
+                                                            model = editModel,
+                                                            prompt = prompt,
+                                                            imageBytes = selectedImageBytes,
+                                                            size = size,
+                                                            quality = quality,
+                                                            outputFormat = outputFormat,
+                                                            background = background
+                                                        )
+
+                                                        ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
+                                                            model = editModel,
+                                                            prompt = prompt,
+                                                            imageBytes = selectedImageBytes,
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
+                                                            size = size,
+                                                            quality = quality
+                                                        )
+                                                    }
+                                                } else {
+                                                    callGenerate(
+                                                        baseUrl = baseUrl,
+                                                        apiKey = apiKey,
+                                                        model = generateModel,
+                                                        prompt = prompt,
+                                                        n = count.toIntOrNull() ?: 1,
+                                                        size = size,
+                                                        quality = quality
+                                                    )
+                                                }
+                                            }
+                                            imageBytes = result
+                                            val saved = saveToGallery(context, result, outputFormat)
+                                            val item = HistoryItem(
+                                                time = now(),
+                                                mode = if (selectedImageBytes != null) "edit" else "generate",
+                                                model = if (selectedImageBytes != null) editModel else generateModel,
+                                                prompt = prompt,
+                                                path = saved
+                                            )
+                                            history = listOf(item) + history.take(29)
+                                            saveHistory(prefs, history)
+                                            status = "生成完成，已保存到相册：$saved"
+                                        } catch (e: Exception) {
+                                            status = "生成失败：${e.message}"
+                                        } finally {
+                                            isLoading = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (isLoading) "正在生成..." else if (selectedImageBytes != null) "开始编辑图像" else "开始生成图像")
+                            }
+
+                            StatusCard(status)
+                        }
+                    }
+                }
+
+                imageBytes?.let { bytes ->
+                    item {
+                        val bitmap = remember(bytes) {
+                            decodePreviewBitmap(bytes)
+                        }
+                        if (bitmap != null) {
+                            ElevatedCard(
+                                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                                shape = RoundedCornerShape(24.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    SectionTitle("结果预览", "生成完成后自动显示并写入系统相册")
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(Color.White)
+                                            .border(1.dp, Color(0xFFD9E1F5), RoundedCornerShape(20.dp))
+                                            .padding(8.dp)
+                                    ) {
+                                        Image(
+                                            bitmap = bitmap.asImageBitmap(),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+        }
+
+        ScreenRoute.HISTORY -> Scaffold(
+            containerColor = MaterialTheme.colorScheme.surface,
+            bottomBar = {
+                BottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onRouteSelected = { currentRoute = it }
+                )
+            }
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("历史记录", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text("最近生成与编辑结果", color = Color(0xFF6B7280))
+                        }
+                        TextButton(onClick = {
+                            history = emptyList()
+                            saveHistory(prefs, history)
+                            status = "历史记录已清空。"
+                        }) {
+                            Text("清空")
+                        }
+                    }
+                }
+                if (history.isEmpty()) {
+                    item {
+                        ElevatedCard(
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Text(
+                                "暂无历史记录",
+                                modifier = Modifier.padding(18.dp),
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                } else {
+                    items(history.take(30)) { item ->
+                        HistoryCard(item)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomNavigationBar(
+    currentRoute: ScreenRoute,
+    onRouteSelected: (ScreenRoute) -> Unit
+) {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        NavigationBarItem(
+            selected = currentRoute == ScreenRoute.MAIN,
+            onClick = { onRouteSelected(ScreenRoute.MAIN) },
+            icon = { Text("创") },
+            label = { Text("创作") }
+        )
+        NavigationBarItem(
+            selected = currentRoute == ScreenRoute.HISTORY,
+            onClick = { onRouteSelected(ScreenRoute.HISTORY) },
+            icon = { Text("历") },
+            label = { Text("历史") }
+        )
+        NavigationBarItem(
+            selected = currentRoute == ScreenRoute.SETTINGS,
+            onClick = { onRouteSelected(ScreenRoute.SETTINGS) },
+            icon = { Text("设") },
+            label = { Text("设置") }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsScreen(
+    baseUrl: String,
+    apiKey: String,
+    apiMode: ApiMode,
+    customGenerateModel: String,
+    currentGenerateModel: String,
+    customEditModel: String,
+    currentEditModel: String,
+    recommendedModels: List<String>,
+    onBaseUrlChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onApiModeChange: (ApiMode) -> Unit,
+    onCustomGenerateModelChange: (String) -> Unit,
+    onSelectGenerateModel: (String) -> Unit,
+    onCustomEditModelChange: (String) -> Unit,
+    onSelectEditModel: (String) -> Unit,
+    settingsNotice: String,
+    onBack: () -> Unit,
+    onClearConfig: () -> Unit,
+    onSave: () -> Unit,
+    outerPadding: PaddingValues = PaddingValues()
+) {
+    Scaffold(
+        containerColor = pageBg,
+        topBar = {
+            TopAppBar(
+                title = { Text("接口设置") },
+                navigationIcon = {
+                    TextButton(onClick = onBack) { Text("返回") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = pageBg)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(outerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 18.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            ElevatedCard(
+                colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                shape = RoundedCornerShape(28.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    SectionTitle("连接配置", "填写接口地址、密钥与模型参数")
+
+                    OutlinedTextField(
+                        value = baseUrl,
+                        onValueChange = onBaseUrlChange,
+                        label = { Text("Base URL") },
+                        placeholder = { Text("例如：https://api.openai.com/v1") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = onApiKeyChange,
+                        label = { Text("API Key") },
+                        placeholder = { Text("输入你的密钥") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp)
+                    )
+
+                    AppDropdownField(
+                        title = "接口模式",
+                        selected = apiMode.label,
+                        options = ApiMode.entries.map { it.label },
+                        onSelected = { label ->
+                            ApiMode.entries.firstOrNull { it.label == label }?.let(onApiModeChange)
+                        }
+                    )
+
+                    AppEditableDropdownField(
+                        title = "文生图模型 ID",
+                        value = customGenerateModel,
+                        options = recommendedModels,
+                        placeholder = "可手动输入，也可从推荐模型中选择",
+                        onValueChange = onCustomGenerateModelChange,
+                        onSelected = onSelectGenerateModel
+                    )
+
+                    AppEditableDropdownField(
+                        title = "图生图模型 ID",
+                        value = customEditModel,
+                        options = recommendedModels,
+                        placeholder = "可手动输入，也可从推荐模型中选择",
+                        onValueChange = onCustomEditModelChange,
+                        onSelected = onSelectEditModel
+                    )
+
+                    Button(
+                        onClick = onSave,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("保存接口设置")
+                    }
+
+                    TextButton(
+                        onClick = onClearConfig,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("清除密钥、配置和历史记录")
+                    }
+
+                    if (settingsNotice.isNotBlank()) {
+                        StatusCard(settingsNotice)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, desc: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = desc,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF6B7280)
+        )
+    }
+}
+
+@Composable
+private fun InfoCard(title: String, content: String) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                text = content,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppDropdownField(
+    title: String,
+    selected: String,
+    options: List<String>,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = selected,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {
+                            onSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppEditableDropdownField(
+    title: String,
+    value: String,
+    options: List<String>,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = { Text(placeholder) },
+                singleLine = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {
+                            onSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusCard(status: String) {
+    val isError = status.contains("失败") || status.contains("HTTP")
+    val bg = if (isError) errorBg else successBg
+    val fg = if (isError) errorText else successText
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(bg)
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(fg)
+        )
+        Text(
+            text = status,
+            color = fg,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun HistoryCard(item: HistoryItem) {
+    Column(
+        modifier = Modifier.padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = "${item.time} · ${item.mode}",
+            style = MaterialTheme.typography.labelMedium,
+            color = accent
+        )
+        Text(
+            text = item.model,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = item.prompt,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = item.path,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.Gray
+        )
+    }
+}
+
+fun decodePreviewBitmap(bytes: ByteArray, maxSide: Int = 1600) =
+    BitmapFactory.Options().run {
+        inJustDecodeBounds = true
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, this)
+
+        var sample = 1
+        while ((outWidth / sample) > maxSide || (outHeight / sample) > maxSide) {
+            sample *= 2
+        }
+
+        inJustDecodeBounds = false
+        inSampleSize = sample.coerceAtLeast(1)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, this)
+    }
+
+fun endpoint(baseUrl: String, path: String): String {
+    val b = baseUrl.trim().trimEnd('/')
+    return if (b.endsWith("/v1")) "$b$path" else "$b/v1$path"
+}
+
+fun readAllBytes(context: Context, imageUri: Uri): ByteArray =
+    context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+        ?: error("无法读取参考图")
+
+fun callGenerate(
+    baseUrl: String,
+    apiKey: String,
+    model: String,
+    prompt: String,
+    n: Int,
+    size: String,
+    quality: String
+): ByteArray {
+    require(apiKey.isNotBlank()) { "请填写 API Key" }
+    require(prompt.isNotBlank()) { "请填写 Prompt" }
+
+    val body = JSONObject()
+        .put("model", model.trim())
+        .put("prompt", prompt)
+        .put("n", n.coerceIn(1, 10))
+        .put("size", size)
+        .put("quality", quality)
+
+    val conn = URL(endpoint(baseUrl, "/images/generations")).openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.connectTimeout = 30000
+    conn.readTimeout = 180000
+    conn.doOutput = true
+    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.outputStream.use { it.write(body.toString().toByteArray()) }
+    return parseImageResponse(conn)
+}
+
+fun callEdit(
+    baseUrl: String,
+    apiKey: String,
+    model: String,
+    prompt: String,
+    imageBytes: ByteArray?,
+    size: String,
+    quality: String,
+    outputFormat: String,
+    background: String
+): ByteArray {
+    require(apiKey.isNotBlank()) { "请填写 API Key" }
+    require(prompt.isNotBlank()) { "请填写编辑指令" }
+    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }
+
+    val boundary = "----AndroidBoundary${UUID.randomUUID()}"
+    val conn = URL(endpoint(baseUrl, "/images/edits")).openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.connectTimeout = 30000
+    conn.readTimeout = 180000
+    conn.doOutput = true
+    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+    conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+    conn.outputStream.use { out ->
+        fun field(name: String, value: String) {
+            out.write("--$boundary\r
+".toByteArray())
+            out.write("Content-Disposition: form-data; name=\"$name\"\r
+\r
+$value\r
+".toByteArray())
+        }
+
+        field("model", model.trim())
+        field("prompt", prompt)
+        field("size", size)
+        field("quality", quality)
+        field("output_format", outputFormat)
+        if (background.isNotBlank()) field("background", background)
+
+        out.write("--$boundary\r
+".toByteArray())
+        out.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r
+".toByteArray())
+        out.write("Content-Type: image/png\r
+\r
+".toByteArray())
+        out.write(sourceImageBytes)
+        out.write("\r
+--$boundary--\r
+".toByteArray())
+    }
+    return parseImageResponse(conn)
+}
+
+fun callEditGenerationsCompat(
+    baseUrl: String,
+    apiKey: String,
+    model: String,
+    prompt: String,
+    imageBytes: ByteArray?,
+    size: String,
+    quality: String
+): ByteArray {
+    require(apiKey.isNotBlank()) { "请填写 API Key" }
+    require(prompt.isNotBlank()) { "请填写编辑指令" }
+    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }
+
+    val inputImageDataUrl = buildCompactImageDataUrl(sourceImageBytes)
+
+    val compatPrompt = """
+        $prompt
+
+        Reference image is provided in the request image fields. Use it as the visual reference for this edit.
+    """.trimIndent()
+
+    val body = JSONObject()
+        .put("model", model.trim())
+        .put("prompt", compatPrompt)
+        .put("n", 1)
+        .put("size", size)
+        .put("quality", quality)
+        .put("image", inputImageDataUrl)
+        .put("reference_image", inputImageDataUrl)
+
+    val jsonBody = body.toString()
+    val conn = URL(endpoint(baseUrl, "/images/generations")).openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.connectTimeout = 30000
+    conn.readTimeout = 180000
+    conn.doOutput = true
+    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.outputStream.use { it.write(jsonBody.toByteArray()) }
+    return parseImageResponse(conn)
+}
+
+fun buildCompactImageDataUrl(
+    originalBytes: ByteArray,
+    maxSide: Int = 1536,
+    jpegQuality: Int = 86,
+    maxEncodedBytes: Int = 6 * 1024 * 1024
+): String {
+    val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size, bounds)
+
+    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "参考图格式无法识别" }
+
+    var sampleSize = 1
+    while ((bounds.outWidth / sampleSize) > maxSide || (bounds.outHeight / sampleSize) > maxSide) {
+        sampleSize *= 2
+    }
+
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize.coerceAtLeast(1)
+        inPreferredConfig = Bitmap.Config.RGB_565
+    }
+
+    val bitmap = BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size, options)
+        ?: error("参考图解码失败")
+
+    val output = ByteArrayOutputStream()
+    try {
+        bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality.coerceIn(60, 95), output)
+    } finally {
+        bitmap.recycle()
+    }
+
+    val compactBytes = output.toByteArray()
+    require(compactBytes.size <= maxEncodedBytes) {
+        "参考图过大，已阻止以避免内存溢出。请先裁剪或压缩图片后再使用 Generations 兼容模式。"
+    }
+
+    return "data:image/jpeg;base64," + Base64.encodeToString(compactBytes, Base64.NO_WRAP)
+}
+
+fun callEditResponses(
+    baseUrl: String,
+    apiKey: String,
+    model: String,
+    prompt: String,
+    imageBytes: ByteArray?,
+    size: String,
+    quality: String,
+    outputFormat: String,
+    background: String
+): ByteArray {
+    require(apiKey.isNotBlank()) { "请填写 API Key" }
+    require(prompt.isNotBlank()) { "请填写编辑指令" }
+    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }
+
+    val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(sourceImageBytes, Base64.NO_WRAP)
+
+    val inputContent = JSONArray().apply {
+        put(JSONObject().put("type", "input_text").put("text", "Use the following text as the complete prompt. Do not rewrite it:
+$prompt"))
+        put(JSONObject().put("type", "input_image").put("image_url", inputImageDataUrl))
+    }
+
+    val tool = JSONObject()
+        .put("type", "image_generation")
+        .put("action", "edit")
+        .put("size", size)
+        .put("quality", quality)
+        .put("output_format", outputFormat)
+
+    if (background.isNotBlank()) {
+        tool.put("background", background)
+    }
+
+    val body = JSONObject()
+        .put("model", model.trim())
+        .put(
+            "input",
+            JSONArray().put(
+                JSONObject()
+                    .put("role", "user")
+                    .put("content", inputContent)
+            )
+        )
+        .put("tools", JSONArray().put(tool))
+        .put("tool_choice", "required")
+
+    val conn = URL(endpoint(baseUrl, "/responses")).openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.connectTimeout = 30000
+    conn.readTimeout = 180000
+    conn.doOutput = true
+    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.outputStream.use { it.write(body.toString().toByteArray()) }
+    return parseResponsesImageResponse(conn, outputFormat)
+}
+
+fun parseImageResponse(conn: HttpURLConnection): ByteArray {
+    val code = conn.responseCode
+    val stream = if (code in 200..299) conn.inputStream else conn.errorStream ?: conn.inputStream
+    val text = stream.bufferedReader().use { it.readText() }
+    if (code !in 200..299) error("HTTP $code: $text")
+
+    val data = JSONObject(text).optJSONArray("data") ?: error("响应缺少 data")
+    val first = data.optJSONObject(0) ?: error("响应 data 为空")
+    val b64 = first.optString("b64_json", "")
+    if (b64.isNotBlank()) return Base64.decode(b64, Base64.DEFAULT)
+
+    val url = first.optString("url", "")
+    if (url.isNotBlank()) return download(url)
+
+    error("响应中既没有 url 也没有 b64_json")
+}
+
+fun parseResponsesImageResponse(conn: HttpURLConnection, outputFormat: String): ByteArray {
+    val code = conn.responseCode
+    val stream = if (code in 200..299) conn.inputStream else conn.errorStream ?: conn.inputStream
+    val text = stream.bufferedReader().use { it.readText() }
+    if (code !in 200..299) error("HTTP $code: $text")
+
+    val output = JSONObject(text).optJSONArray("output") ?: error("响应缺少 output")
+    for (index in 0 until output.length()) {
+        val item = output.optJSONObject(index) ?: continue
+        if (item.optString("type") != "image_generation_call") continue
+
+        val result = item.optString("result", "")
+        if (result.isNotBlank()) {
+            val pureBase64 = result.removePrefix("data:image/png;base64,")
+                .removePrefix("data:image/jpeg;base64,")
+                .removePrefix("data:image/webp;base64,")
+            return Base64.decode(pureBase64, Base64.DEFAULT)
+        }
+    }
+
+    for (index in 0 until output.length()) {
+        val item = output.optJSONObject(index) ?: continue
+        if (item.optString("type") != "image_generation_call") continue
+
+        val resultUrl = item.optString("url", "")
+        if (resultUrl.isNotBlank()) {
+            return download(resultUrl)
+        }
+
+        val nested = item.optJSONObject("result")
+        val nestedUrl = nested?.optString("url", "") ?: ""
+        if (nestedUrl.isNotBlank()) {
+            return download(nestedUrl)
+        }
+
+        val nestedB64 = nested?.optString("b64_json", "") ?: ""
+        if (nestedB64.isNotBlank()) {
+            return Base64.decode(nestedB64, Base64.DEFAULT)
+        }
+    }
+
+    error("Responses API 未返回可用图片数据（既没有 result/base64，也没有 url）")
+}
+
+fun download(url: String): ByteArray {
+    val conn = URL(url).openConnection() as HttpURLConnection
+    conn.connectTimeout = 30000
+    conn.readTimeout = 180000
+    return conn.inputStream.use { it.readBytes() }
+}
+
+fun saveToGallery(context: Context, bytes: ByteArray, format: String): String {
+    val ext = if (format == "jpeg") "jpg" else format
+    val name = "image_${System.currentTimeMillis()}.$ext"
+    val values = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, name)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/$ext")
+        put(
+            MediaStore.Images.Media.RELATIVE_PATH,
+            Environment.DIRECTORY_PICTURES + "/UniversalImageStudio"
+        )
+    }
+    val uri = context.contentResolver.insert(
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+        values
+    ) ?: error("无法创建图片文件")
+    context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+    return uri.toString()
+}
+
+fun now(): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
+
+fun secureConfigPreferences(context: Context): android.content.SharedPreferences {
+    val legacyPrefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
+
+    val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    val securePrefs = EncryptedSharedPreferences.create(
+        context,
+        "secure_config",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    if (!securePrefs.getBoolean("secureMigratedFromV16", false)) {
+        val editor = securePrefs.edit()
+        val keys = listOf("baseUrl", "apiKey", "apiMode", "generateModel", "editModel", "model", "history")
+        keys.forEach { key ->
+            val value = legacyPrefs.getString(key, null)
+            if (value != null) editor.putString(key, value)
+        }
+        editor.putBoolean("secureMigratedFromV16", true).apply()
+
+        legacyPrefs.edit()
+            .remove("baseUrl")
+            .remove("apiKey")
+            .remove("apiMode")
+            .remove("generateModel")
+            .remove("editModel")
+            .remove("model")
+            .remove("history")
+            .apply()
+    }
+
+    return securePrefs
+}
+
+fun loadHistory(prefs: android.content.SharedPreferences): List<HistoryItem> {
+    val arr = JSONArray(prefs.getString("history", "[]") ?: "[]")
+    return (0 until arr.length()).mapNotNull { i ->
+        arr.optJSONObject(i)?.let {
+            HistoryItem(
+                it.optString("time"),
+                it.optString("mode"),
+                it.optString("model"),
+                it.optString("prompt"),
+                it.optString("path")
+            )
+        }
+    }
+}
+
+fun saveHistory(prefs: android.content.SharedPreferences, items: List<HistoryItem>) {
+    val arr = JSONArray()
+    items.forEach {
+        arr.put(
+            JSONObject()
+                .put("time", it.time)
+                .put("mode", it.mode)
+                .put("model", it.model)
+                .put("prompt", it.prompt)
+                .put("path", it.path)
+        )
+    }
+    prefs.edit().putString("history", arr.toString()).apply()
+}
+
