@@ -415,10 +415,17 @@ fun MainScreen() {
                                 }
                             }
 
-                            SectionTitle("尺寸", "常用尺寸使用下拉选择，高级参数默认收起以降低首页首次渲染压力")
+                            SectionTitle("画质与比例", "尺寸拆分为画质和比例两个选择框，比例已补充 3:4、4:3、16:9、9:16 等常用构图")
 
                             AppDropdownField(
-                                title = "尺寸",
+                                title = "画质",
+                                selected = quality,
+                                options = qualityOptions,
+                                onSelected = { quality = it }
+                            )
+
+                            AppDropdownField(
+                                title = "比例",
                                 selected = selectedSizeOption.title + " · " + selectedSizeOption.value,
                                 options = currentSizes.map { "${it.title} · ${it.value}" },
                                 onSelected = { display ->
@@ -429,8 +436,8 @@ fun MainScreen() {
                             )
 
                             InfoCard(
-                                title = "当前尺寸",
-                                content = "${selectedSizeOption.title} · ${selectedSizeOption.value}\n${selectedSizeOption.desc}"
+                                title = "当前画质 / 比例",
+                                content = "画质：$quality\n比例：${selectedSizeOption.title}\n实际尺寸：${selectedSizeOption.value}\n${selectedSizeOption.desc}"
                             )
 
                             TextButton(onClick = { showAdvancedOptions = !showAdvancedOptions }) {
@@ -441,13 +448,6 @@ fun MainScreen() {
                                 InfoCard(
                                     title = "比例说明",
                                     content = ratioGuide.joinToString("\n")
-                                )
-
-                                AppDropdownField(
-                                    title = "质量",
-                                    selected = quality,
-                                    options = qualityOptions,
-                                    onSelected = { quality = it }
                                 )
 
                                 AppDropdownField(
@@ -510,6 +510,17 @@ fun MainScreen() {
                                                             quality = quality,
                                                             outputFormat = outputFormat,
                                                             background = background
+                                                        )
+
+                                                        ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
+                                                            context = context,
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
+                                                            model = editModel,
+                                                            prompt = prompt,
+                                                            imageUri = selectedImage,
+                                                            size = size,
+                                                            quality = quality
                                                         )
                                                     }
                                                 } else {
@@ -1006,6 +1017,52 @@ fun callEdit(
         context.contentResolver.openInputStream(sourceImageUri)?.use { it.copyTo(out) }
         out.write("\r\n--$boundary--\r\n".toByteArray())
     }
+    return parseImageResponse(conn)
+}
+
+fun callEditGenerationsCompat(
+    context: Context,
+    baseUrl: String,
+    apiKey: String,
+    model: String,
+    prompt: String,
+    imageUri: Uri?,
+    size: String,
+    quality: String
+): ByteArray {
+    require(apiKey.isNotBlank()) { "请填写 API Key" }
+    require(prompt.isNotBlank()) { "请填写编辑指令" }
+    val sourceImageUri = requireNotNull(imageUri) { "请先选择参考图" }
+
+    val imageBytes = context.contentResolver.openInputStream(sourceImageUri)?.use { it.readBytes() }
+        ?: error("无法读取参考图")
+    val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+
+    val compatPrompt = """
+        $prompt
+
+        Reference image:
+        $inputImageDataUrl
+    """.trimIndent()
+
+    val body = JSONObject()
+        .put("model", model.trim())
+        .put("prompt", compatPrompt)
+        .put("n", 1)
+        .put("size", size)
+        .put("quality", quality)
+        .put("image", inputImageDataUrl)
+        .put("image_url", inputImageDataUrl)
+        .put("reference_image", inputImageDataUrl)
+
+    val conn = URL(endpoint(baseUrl, "/images/generations")).openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.connectTimeout = 30000
+    conn.readTimeout = 180000
+    conn.doOutput = true
+    conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.outputStream.use { it.write(body.toString().toByteArray()) }
     return parseImageResponse(conn)
 }
 
