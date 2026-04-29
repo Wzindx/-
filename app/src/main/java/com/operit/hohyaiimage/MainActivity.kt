@@ -326,15 +326,14 @@ fun MainScreen() {
                     .fillMaxSize()
                     .padding(padding)
                     .navigationBarsPadding(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Top
                     ) {
@@ -397,26 +396,44 @@ fun MainScreen() {
 
                             if (editMode) {
                                 Card(
-                                    colors = CardDefaults.cardColors(containerColor = softAccent),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
                                     shape = RoundedCornerShape(18.dp)
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(14.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Button(onClick = { picker.launch("image/*") }) {
-                                            Text("选择参考图")
-                                        }
-                                        Text(
-                                            text = selectedImage?.lastPathSegment ?: "当前未选择图片",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                        if (selectedImage != null) {
-                                            Text(
-                                                text = if (selectedImageBytes != null) "参考图已缓存，可直接用于编辑" else "参考图 URI 已记录，但缓存读取失败",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (selectedImageBytes != null) successText else errorText
-                                            )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = selectedImage?.lastPathSegment ?: "当前未选择图片",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                if (selectedImage != null) {
+                                                    Text(
+                                                        text = if (selectedImageBytes != null) "参考图已缓存，可直接用于编辑" else "参考图 URI 已记录，但缓存读取失败",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = if (selectedImageBytes != null) successText else errorText
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = "选择一张图片作为编辑参考",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFF6B7280)
+                                                    )
+                                                }
+                                            }
+                                            TextButton(onClick = { picker.launch("image/*") }) {
+                                                Text("选择参考图")
+                                            }
                                         }
                                     }
                                 }
