@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -269,6 +268,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var editMode by rememberSaveable { mutableStateOf(false) }
     var selectedImage by remember { mutableStateOf(null as Uri?) }
     var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
+    var isReadingReferenceImage by remember { mutableStateOf(false) }
     var showReferenceSheet by rememberSaveable { mutableStateOf(false) }
     var showModelSheet by rememberSaveable { mutableStateOf(false) }
     var showParamsSheet by rememberSaveable { mutableStateOf(false) }
@@ -299,15 +299,27 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedImage = uri
-        selectedImageBytes = runCatching {
-            uri?.let { readAllBytes(context, it) }
-        }.getOrNull()
-        if (uri != null && selectedImageBytes == null) {
-            status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"
+        if (uri == null) {
+            isReadingReferenceImage = false
+            return@rememberLauncherForActivityResult
         }
-        if (selectedImageBytes != null) {
-            showReferenceSheet = false
-            status = ""
+
+        isReadingReferenceImage = true
+        status = "正在读取参考图..."
+        activityTaskScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching { readAllBytes(context, uri) }.getOrNull()
+            }
+
+            selectedImageBytes = bytes
+            isReadingReferenceImage = false
+
+            if (bytes == null) {
+                status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"
+            } else {
+                showReferenceSheet = false
+                status = ""
+            }
         }
     }
 
@@ -724,7 +736,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(20.dp))
-                                    .clickable { picker.launch("image/*") },
+                                    .clickable(enabled = !isReadingReferenceImage) { picker.launch("image/*") },
                                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
                                 shape = RoundedCornerShape(20.dp),
                                 tonalElevation = 1.dp
@@ -741,11 +753,19 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                         verticalArrangement = Arrangement.spacedBy(3.dp)
                                     ) {
                                         Text(
-                                            text = if (selectedImageBytes != null) "更换图片" else "选择图片",
+                                            text = if (isReadingReferenceImage) "读取图片中..." else if (selectedImageBytes != null) "更换图片" else "选择图片",
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.titleMedium
                                         )
-                                        if (selectedImageBytes != null) {
+                                        if (isReadingReferenceImage) {
+                                            Text(
+                                                text = "正在读取参考图，请稍候",
+                                                color = Color(0xFF6B7280),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        } else if (selectedImageBytes != null) {
                                             Text(
                                                 text = selectedImage?.lastPathSegment ?: "已选择图片",
                                                 color = Color(0xFF6B7280),
@@ -1053,7 +1073,7 @@ private fun AppBottomSheetPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.72f)
+                .heightIn(max = 560.dp)
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 28.dp),
