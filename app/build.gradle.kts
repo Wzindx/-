@@ -13,33 +13,19 @@ android {
     val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
     val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
 
-    val bundledKeystore = file("keystore/universal-image-studio-release.jks")
-    val bundledKeystorePassword = "UniversalImageStudio2026"
-    val bundledKeyAlias = "universal-image-studio"
-    val bundledKeyPassword = "UniversalImageStudio2026"
-
-    val hasSigningEnv =
+    val hasReleaseSigning =
         !keystorePath.isNullOrBlank() &&
         !keystorePassword.isNullOrBlank() &&
         !keyAlias.isNullOrBlank() &&
         !keyPassword.isNullOrBlank()
-    val hasBundledSigning = bundledKeystore.exists()
-    val hasReleaseSigning = hasSigningEnv || hasBundledSigning
 
     if (hasReleaseSigning) {
         signingConfigs {
-            create("sharedRelease") {
-                if (hasSigningEnv) {
-                    storeFile = file(keystorePath!!)
-                    storePassword = keystorePassword
-                    this.keyAlias = keyAlias
-                    this.keyPassword = keyPassword
-                } else {
-                    storeFile = bundledKeystore
-                    storePassword = bundledKeystorePassword
-                    this.keyAlias = bundledKeyAlias
-                    this.keyPassword = bundledKeyPassword
-                }
+            create("releaseSigning") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
             }
         }
     }
@@ -55,7 +41,7 @@ android {
     buildTypes {
         debug {
             if (hasReleaseSigning) {
-                signingConfig = signingConfigs.getByName("sharedRelease")
+                signingConfig = signingConfigs.getByName("releaseSigning")
             }
         }
         release {
@@ -66,7 +52,7 @@ android {
                 "proguard-rules.pro"
             )
             if (hasReleaseSigning) {
-                signingConfig = signingConfigs.getByName("sharedRelease")
+                signingConfig = signingConfigs.getByName("releaseSigning")
             }
         }
     }
