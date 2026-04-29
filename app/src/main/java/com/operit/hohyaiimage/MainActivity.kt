@@ -146,7 +146,7 @@ data class HistoryItem(
     val error: String = ""
 )
 
-data class ImageTask(
+private data class ImageTask(
     val id: String,
     val time: String,
     val mode: String,
