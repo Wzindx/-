@@ -915,7 +915,7 @@ private fun SettingsScreen(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    SectionTitle("连接配置", "填写接口地址、密钥与模型参数")
+                    SectionTitle("连接配置", "这里只保留接口地址和密钥；模型与生成参数在首页二级栏调整")
 
                     OutlinedTextField(
                         value = baseUrl,
@@ -938,38 +938,12 @@ private fun SettingsScreen(
                         shape = RoundedCornerShape(18.dp)
                     )
 
-                    AppDropdownField(
-                        title = "接口模式",
-                        selected = apiMode.label,
-                        options = ApiMode.entries.map { it.label },
-                        onSelected = { label ->
-                            ApiMode.entries.firstOrNull { it.label == label }?.let(onApiModeChange)
-                        }
-                    )
-
-                    AppEditableDropdownField(
-                        title = "文生图模型 ID",
-                        value = customGenerateModel,
-                        options = recommendedModels,
-                        placeholder = "可手动输入，也可从推荐模型中选择",
-                        onValueChange = onCustomGenerateModelChange,
-                        onSelected = onSelectGenerateModel
-                    )
-
-                    AppEditableDropdownField(
-                        title = "图生图模型 ID",
-                        value = customEditModel,
-                        options = recommendedModels,
-                        placeholder = "可手动输入，也可从推荐模型中选择",
-                        onValueChange = onCustomEditModelChange,
-                        onSelected = onSelectEditModel
-                    )
 
                     Button(
                         onClick = onSave,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("保存接口设置")
+                        Text("保存连接设置")
                     }
 
                     TextButton(
@@ -984,6 +958,57 @@ private fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ConfigEntryCard(
+    title: String,
+    primary: String,
+    secondary: String,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = primary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = secondary,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF6B7280),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = "›",
+                fontSize = 34.sp,
+                color = accent,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
