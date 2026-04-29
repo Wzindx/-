@@ -526,6 +526,13 @@ fun MainScreen() {
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold
                         )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "输入提示词，选图后会自动切换为图生图。",
+                            color = Color(0xFF6B7280),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
 
@@ -538,7 +545,7 @@ fun MainScreen() {
                             modifier = Modifier.padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            SectionTitle("创作", "输入描述，选择图片后自动切换为图生图。")
+                            SectionTitle("创作", "")
                             StatusCard(status)
 
                             OutlinedTextField(
