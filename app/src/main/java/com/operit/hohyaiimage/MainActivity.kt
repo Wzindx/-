@@ -83,6 +83,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.operit.hohyaiimage.ui.theme.AppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -810,51 +812,56 @@ private fun AppBottomSheetPanel(
     title: String,
     description: String,
     onDismiss: () -> Unit,
-    content: @Composable Column.() -> Unit
+    content: @Composable () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.28f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.BottomCenter
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = false) {},
-            color = Color(0xFFF4F6FF),
-            shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
-            tonalElevation = 8.dp
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.28f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .clickable(enabled = false) {},
+                color = Color(0xFFF4F6FF),
+                shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
+                tonalElevation = 8.dp
             ) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .size(width = 64.dp, height = 7.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(Color(0xFF9CA3AF).copy(alpha = 0.7f))
-                )
-                Spacer(Modifier.height(18.dp))
-                Text(
-                    text = title,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
-                )
-                Text(
-                    text = description,
-                    color = Color(0xFF6B7280),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                content()
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .size(width = 64.dp, height = 7.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(Color(0xFF9CA3AF).copy(alpha = 0.7f))
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        text = title,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF111827)
+                    )
+                    Text(
+                        text = description,
+                        color = Color(0xFF6B7280),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    content()
+                }
             }
         }
     }
