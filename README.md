@@ -109,9 +109,3 @@ app/src/main/java/com/yang/emperor/MainActivity.kt
 .github/workflows/release.yml
 README.md
 ```
-
-## 安全提醒
-
-- 不要把 GitHub Token 提交到仓库。
-- 不要把 API Key 写入 README、Release 说明或源码。
-- 如果 Token 曾经暴露，请立即撤销并重新生成。
