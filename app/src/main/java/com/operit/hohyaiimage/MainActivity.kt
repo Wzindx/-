@@ -512,8 +512,7 @@ fun MainScreen() {
                             if (showAdvancedOptions) {
                                 InfoCard(
                                     title = "尺寸说明",
-                                    content = ratioGuide.joinToString("
-")
+                                    content = ratioGuide.joinToString("\n")
                                 )
 
                                 AppDropdownField(
