@@ -319,7 +319,8 @@ fun MainScreen() {
             containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
                 Surface(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
                     shadowElevation = 0.dp
                 ) {
                     Column(
@@ -336,19 +337,19 @@ fun MainScreen() {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "通用图像工坊",
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(
                                     text = "首页聚焦任务创建，接口配置移入二级页面，交互更轻量",
-                                    color = Color.White.copy(alpha = 0.92f),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
                             TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {
-                                Text("接口设置", color = Color.White)
+                                Text("接口设置", color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }
@@ -722,12 +723,7 @@ private fun SettingsScreen(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    SectionTitle("连接配置", "v1.7 起使用 Android Keystore 加密保存 API Key；root 环境仍无法做到绝对防护，但配置文件不再明文暴露")
-
-                    InfoCard(
-                        title = "安全存储说明",
-                        content = "API Key 已迁移到 EncryptedSharedPreferences。旧版明文配置会在首次启动时自动迁移并清理。"
-                    )
+                    SectionTitle("连接配置", "填写接口地址、密钥与模型参数")
 
                     OutlinedTextField(
                         value = baseUrl,
