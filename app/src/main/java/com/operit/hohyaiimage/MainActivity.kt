@@ -2,6 +2,7 @@ package com.operit.hohyaiimage
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.net.Uri
@@ -1034,15 +1035,12 @@ fun callEditGenerationsCompat(
     require(prompt.isNotBlank()) { "请填写编辑指令" }
     val sourceImageUri = requireNotNull(imageUri) { "请先选择参考图" }
 
-    val imageBytes = context.contentResolver.openInputStream(sourceImageUri)?.use { it.readBytes() }
-        ?: error("无法读取参考图")
-    val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+    val inputImageDataUrl = buildCompactImageDataUrl(context, sourceImageUri)
 
     val compatPrompt = """
         $prompt
 
-        Reference image:
-        $inputImageDataUrl
+        Reference image is provided in the request image fields. Use it as the visual reference for this edit.
     """.trimIndent()
 
     val body = JSONObject()
@@ -1052,9 +1050,9 @@ fun callEditGenerationsCompat(
         .put("size", size)
         .put("quality", quality)
         .put("image", inputImageDataUrl)
-        .put("image_url", inputImageDataUrl)
         .put("reference_image", inputImageDataUrl)
 
+    val jsonBody = body.toString()
     val conn = URL(endpoint(baseUrl, "/images/generations")).openConnection() as HttpURLConnection
     conn.requestMethod = "POST"
     conn.connectTimeout = 30000
@@ -1062,8 +1060,54 @@ fun callEditGenerationsCompat(
     conn.doOutput = true
     conn.setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
     conn.setRequestProperty("Content-Type", "application/json")
-    conn.outputStream.use { it.write(body.toString().toByteArray()) }
+    conn.outputStream.use { it.write(jsonBody.toByteArray()) }
     return parseImageResponse(conn)
+}
+
+fun buildCompactImageDataUrl(
+    context: Context,
+    imageUri: Uri,
+    maxSide: Int = 1536,
+    jpegQuality: Int = 86,
+    maxEncodedBytes: Int = 6 * 1024 * 1024
+): String {
+    val bounds = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+
+    context.contentResolver.openInputStream(imageUri)?.use { input ->
+        BitmapFactory.decodeStream(input, null, bounds)
+    } ?: error("无法读取参考图")
+
+    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "参考图格式无法识别" }
+
+    var sampleSize = 1
+    while ((bounds.outWidth / sampleSize) > maxSide || (bounds.outHeight / sampleSize) > maxSide) {
+        sampleSize *= 2
+    }
+
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize.coerceAtLeast(1)
+        inPreferredConfig = Bitmap.Config.RGB_565
+    }
+
+    val bitmap = context.contentResolver.openInputStream(imageUri)?.use { input ->
+        BitmapFactory.decodeStream(input, null, options)
+    } ?: error("参考图解码失败")
+
+    val output = ByteArrayOutputStream()
+    try {
+        bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality.coerceIn(60, 95), output)
+    } finally {
+        bitmap.recycle()
+    }
+
+    val compactBytes = output.toByteArray()
+    require(compactBytes.size <= maxEncodedBytes) {
+        "参考图过大，已阻止以避免内存溢出。请先裁剪或压缩图片后再使用 Generations 兼容模式。"
+    }
+
+    return "data:image/jpeg;base64," + Base64.encodeToString(compactBytes, Base64.NO_WRAP)
 }
 
 fun callEditResponses(
