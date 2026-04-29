@@ -58,12 +58,14 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -83,10 +85,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.yang.emperor.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1020,6 +1021,7 @@ private fun OnboardingScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppBottomSheetPanel(
     title: String,
@@ -1027,55 +1029,47 @@ private fun AppBottomSheetPanel(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    Dialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.28f))
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            Surface(
+        sheetState = sheetState,
+        sheetMaxWidth = Dp.Unspecified,
+        containerColor = Color(0xFFF4F6FF),
+        contentColor = Color(0xFF111827),
+        shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
+        tonalElevation = 8.dp,
+        dragHandle = {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = false) {},
-                color = Color(0xFFF4F6FF),
-                shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
-                tonalElevation = 8.dp
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .size(width = 64.dp, height = 7.dp)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(Color(0xFF9CA3AF).copy(alpha = 0.7f))
-                    )
-                    Spacer(Modifier.height(18.dp))
-                    Text(
-                        text = title,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
-                    )
-                    Text(
-                        text = description,
-                        color = Color(0xFF6B7280),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    content()
-                }
-            }
+                    .padding(top = 10.dp, bottom = 6.dp)
+                    .size(width = 64.dp, height = 7.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color(0xFF9CA3AF).copy(alpha = 0.7f))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.72f)
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF111827)
+            )
+            Text(
+                text = description,
+                color = Color(0xFF6B7280),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            content()
         }
     }
 }
