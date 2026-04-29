@@ -1457,6 +1457,7 @@ private fun AppDropdownField(
                 modifier = Modifier
                     .heightIn(max = 280.dp)
                     .background(MaterialTheme.colorScheme.surface)
+                    .align(Alignment.BottomEnd)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1504,27 +1505,24 @@ private fun AppEditableDropdownField(
                 onValueChange = onValueChange,
                 placeholder = { Text(placeholder) },
                 singleLine = true,
-                readOnly = true,
+                readOnly = false,
                 trailingIcon = {
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clickable { expanded = !expanded },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null
+                        )
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
-                shape = RoundedCornerShape(18.dp),
-                interactionSource = remember { MutableInteractionSource() }
-                    .also { interactionSource ->
-                        LaunchedEffect(interactionSource) {
-                            interactionSource.interactions.collect { interaction ->
-                                if (interaction is PressInteraction.Release) {
-                                    expanded = !expanded
-                                }
-                            }
-                        }
-                    }
+                shape = RoundedCornerShape(18.dp)
             )
             DropdownMenu(
                 expanded = expanded,
@@ -1532,6 +1530,7 @@ private fun AppEditableDropdownField(
                 modifier = Modifier
                     .heightIn(max = 280.dp)
                     .background(MaterialTheme.colorScheme.surface)
+                    .align(Alignment.BottomEnd)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
