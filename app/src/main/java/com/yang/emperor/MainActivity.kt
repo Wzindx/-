@@ -88,6 +88,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.LocalFocusManager
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import com.yang.emperor.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1398,7 +1408,6 @@ private fun InfoCard(title: String, content: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppDropdownField(
     title: String,
@@ -1414,24 +1423,39 @@ private fun AppDropdownField(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold
         )
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = selected,
                 onValueChange = {},
                 readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                enabled = false,
+                trailingIcon = {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                },
                 modifier = Modifier
-                    .menuAnchor()
                     .fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                    disabledBorderColor = MaterialTheme.colorScheme.outline,
+                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface
+                )
             )
-            ExposedDropdownMenu(
+            // 透明点击层覆盖在 disabled TextField 上
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { expanded = !expanded }
+            )
+            DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.heightIn(max = 280.dp)
+                modifier = Modifier
+                    .heightIn(max = 280.dp)
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1464,6 +1488,8 @@ private fun AppEditableDropdownField(
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -1471,25 +1497,40 @@ private fun AppEditableDropdownField(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold
         )
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
                 placeholder = { Text(placeholder) },
                 singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                readOnly = true,
+                trailingIcon = {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                },
                 modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp)
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
+                shape = RoundedCornerShape(18.dp),
+                interactionSource = remember { MutableInteractionSource() }
+                    .also { interactionSource ->
+                        LaunchedEffect(interactionSource) {
+                            interactionSource.interactions.collect { interaction ->
+                                if (interaction is PressInteraction.Release) {
+                                    expanded = !expanded
+                                }
+                            }
+                        }
+                    }
             )
-            ExposedDropdownMenu(
+            DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.heightIn(max = 280.dp)
+                modifier = Modifier
+                    .heightIn(max = 280.dp)
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1503,6 +1544,7 @@ private fun AppEditableDropdownField(
                         onClick = {
                             onSelected(option)
                             expanded = false
+                            focusManager.clearFocus()
                         }
                     )
                 }
