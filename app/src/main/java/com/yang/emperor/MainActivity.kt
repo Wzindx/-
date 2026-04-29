@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                 AndroidColor.TRANSPARENT
             )
         )
-        setContent { AppTheme { MainScreen() } }
+        setContent { AppTheme { MainScreen(activityTaskScope = activityTaskScope) } }
     }
 }
 
@@ -241,7 +241,7 @@ private val errorText = Color(0xFFC03B3B)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(activityTaskScope: CoroutineScope) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { secureConfigPreferences(context) }
 
