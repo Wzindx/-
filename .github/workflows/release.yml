@@ -29,18 +29,16 @@ jobs:
         uses: actions/checkout@v5
       - name: Download Release APK artifact from triggering workflow
         if: github.event_name == 'workflow_run'
-        uses: dawidd6/action-download-artifact@v7
-        with:
-          run_id: ${{ github.event.workflow_run.id }}
-          name: universal-image-studio-release-apk
-          path: dist-release
-          if_no_artifact_found: fail
-      - name: Collect release APK
-        if: github.event_name == 'workflow_run'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p dist
+          mkdir -p dist-release dist
+          ARTIFACT_NAME="universal-image-studio-release-apk"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          echo "Downloading artifact '$ARTIFACT_NAME' from run $RUN_ID..."
+          gh run download "$RUN_ID" --name "$ARTIFACT_NAME" --dir dist-release
           RELEASE_APK="$(find dist-release -name '*release*.apk' -print -quit 2>/dev/null || true)"
           if [ -z "$RELEASE_APK" ]; then
             echo "No release APK artifact found from triggering workflow."
