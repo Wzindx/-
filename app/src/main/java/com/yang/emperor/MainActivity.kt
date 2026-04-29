@@ -1457,6 +1457,7 @@ private fun AppDropdownField(
                 modifier = Modifier
                     .heightIn(max = 280.dp)
                     .background(MaterialTheme.colorScheme.surface)
+                    .align(Alignment.TopEnd)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1568,6 +1569,7 @@ private fun AppEditableDropdownField(
                 modifier = Modifier
                     .heightIn(max = 320.dp)
                     .background(MaterialTheme.colorScheme.surface)
+                    .align(Alignment.TopEnd)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1599,7 +1601,7 @@ private fun AppEditableDropdownField(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                "自定义输入...",
+                                "自定义输入",
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Medium
                             )
