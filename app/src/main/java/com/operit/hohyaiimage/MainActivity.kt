@@ -217,7 +217,7 @@ fun MainScreen() {
     var apiKey by rememberSaveable { mutableStateOf(prefs.getString("apiKey", "") ?: "") }
     var apiMode by rememberSaveable { mutableStateOf(ApiMode.from(prefs.getString("apiMode", ApiMode.IMAGES.value))) }
     var generateModel by rememberSaveable { mutableStateOf(prefs.getString("generateModel", prefs.getString("model", "gpt-image-2")) ?: "gpt-image-2") }
-    var editModel by rememberSaveable { mutableStateOf(prefs.getString("editModel", "gpt-image-1") ?: "gpt-image-1") }
+    var editModel by rememberSaveable { mutableStateOf(prefs.getString("editModel", "gpt-image-2") ?: "gpt-image-2") }
     var customGenerateModel by rememberSaveable { mutableStateOf(generateModel) }
     var customEditModel by rememberSaveable { mutableStateOf(editModel) }
     var prompt by rememberSaveable { mutableStateOf("") }
@@ -296,7 +296,7 @@ fun MainScreen() {
                 apiKey = ""
                 apiMode = ApiMode.IMAGES
                 generateModel = "gpt-image-2"
-                editModel = "gpt-image-1"
+                editModel = "gpt-image-2"
                 customGenerateModel = generateModel
                 customEditModel = editModel
                 history = emptyList()
@@ -377,32 +377,12 @@ fun MainScreen() {
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             SectionTitle("创建任务", "首页只保留核心创作流程，接口与模型请到二级设置页维护")
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Button(
-                                    onClick = { editMode = false },
-                                    modifier = Modifier.weight(1f),
-                                    enabled = editMode
-                                ) {
-                                    Text("文生图")
-                                }
-                                Button(
-                                    onClick = { editMode = true },
-                                    modifier = Modifier.weight(1f),
-                                    enabled = !editMode
-                                ) {
-                                    Text("图生图 / 编辑")
-                                }
-                            }
-
-                            InfoCard(
-                                title = "当前模型",
-                                content = buildString {
-                                    appendLine("接口模式：${apiMode.label}")
-                                    appendLine("文生图：${if (generateModel.isBlank()) "未设置" else generateModel}")
-                                    append("图生图：${if (editModel.isBlank()) "未设置" else editModel}")
+                            AppDropdownField(
+                                title = "创作模式",
+                                selected = if (editMode) "图生图 / 编辑" else "文生图",
+                                options = listOf("文生图", "图生图 / 编辑"),
+                                onSelected = { mode ->
+                                    editMode = mode == "图生图 / 编辑"
                                 }
                             )
 
