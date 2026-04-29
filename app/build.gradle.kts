@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.operit.hohyaiimage"
+    namespace = "com.yang.emperor"
     compileSdk = 34
 
     val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -31,7 +31,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.operit.hohyaiimage"
+        applicationId = "com.yang.emperor"
         minSdk = 24
         targetSdk = 34
         versionCode = 10

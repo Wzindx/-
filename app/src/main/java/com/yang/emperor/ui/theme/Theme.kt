@@ -1,4 +1,4 @@
-package com.operit.hohyaiimage.ui.theme
+package com.yang.emperor.ui.theme
 
 import android.app.Activity
 import android.os.Build

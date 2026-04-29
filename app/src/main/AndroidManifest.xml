@@ -12,7 +12,7 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.App">
         <activity
-            android:name="com.operit.hohyaiimage.MainActivity"
+            android:name="com.yang.emperor.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.App">
             <intent-filter>

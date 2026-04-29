@@ -1,4 +1,4 @@
-package com.operit.hohyaiimage
+package com.yang.emperor
 
 import android.content.ContentValues
 import android.content.Context
@@ -71,7 +71,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,9 +86,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.operit.hohyaiimage.ui.theme.AppTheme
+import com.yang.emperor.ui.theme.AppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -233,7 +233,6 @@ private val errorText = Color(0xFFC03B3B)
 @Composable
 fun MainScreen() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
     val prefs = remember { secureConfigPreferences(context) }
 
     var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
@@ -269,7 +268,6 @@ fun MainScreen() {
     var showOnboarding by rememberSaveable {
         mutableStateOf(!prefs.getBoolean("onboardingDone", false) && (apiKey.isBlank() || baseUrl.isBlank()))
     }
-    val taskQueue = remember { mutableStateListOf<ImageTask>() }
     val runningTasks = remember { mutableStateListOf<String>() }
     val isConfigured = baseUrl.isNotBlank() && apiKey.isNotBlank()
     val runningCount = runningTasks.size
@@ -301,9 +299,9 @@ fun MainScreen() {
         }
     }
 
-    LaunchedEffect(taskQueue.size) {
-        while (taskQueue.isNotEmpty()) {
-            val task = taskQueue.removeAt(0)
+
+    fun startBackgroundTask(task: ImageTask) {
+        lifecycleScope.launch {
             runningTasks.add(task.id)
             val runningItem = HistoryItem(
                 time = task.time,
@@ -754,22 +752,16 @@ fun MainScreen() {
                                 }
                             }
 
-                            if (runningCount > 0 || taskQueue.isNotEmpty()) {
+                            if (runningCount > 0) {
                                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                 Text(
-                                    text = "后台处理中：${runningCount} 个，排队：${taskQueue.size} 个",
+                                    text = "后台处理中：${runningCount} 个",
                                     color = Color(0xFF6B7280),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
 
-                            Surface(
-                                color = accent,
-                                shape = RoundedCornerShape(22.dp),
-                                tonalElevation = 4.dp,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Button(
+                            Button(
                                     enabled = prompt.isNotBlank() && isConfigured,
                                     onClick = {
                                         val task = ImageTask(
@@ -788,15 +780,20 @@ fun MainScreen() {
                                             outputFormat = outputFormat,
                                             background = background
                                         )
-                                        taskQueue.add(task)
+                                        startBackgroundTask(task)
                                         status = "已开始后台生成，可继续创建新任务。"
                                         currentRoute = ScreenRoute.HISTORY
                                     },
                                     modifier = Modifier.fillMaxWidth()
-                                ) {
+                                ,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )) {
                                     Text("生成图像")
                                 }
-                            }
 
                             ConfigEntryCard(
                                 title = "接口与模型",

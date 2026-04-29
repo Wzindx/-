@@ -104,7 +104,7 @@ env:
 ## 包名
 
 ```text
-com.operit.hohyaiimage
+com.yang.emperor
 ```
 
 ## 技术栈
