@@ -415,17 +415,10 @@ fun MainScreen() {
                                 }
                             }
 
-                            SectionTitle("画质与比例", "尺寸拆分为画质和比例两个选择框，比例已补充 3:4、4:3、16:9、9:16 等常用构图")
+                            SectionTitle("尺寸 / 比例", "当前接口按固定尺寸传参，比例与实际分辨率绑定显示，避免误解为可任意组合")
 
                             AppDropdownField(
-                                title = "画质",
-                                selected = quality,
-                                options = qualityOptions,
-                                onSelected = { quality = it }
-                            )
-
-                            AppDropdownField(
-                                title = "比例",
+                                title = "尺寸 / 比例",
                                 selected = selectedSizeOption.title + " · " + selectedSizeOption.value,
                                 options = currentSizes.map { "${it.title} · ${it.value}" },
                                 onSelected = { display ->
@@ -436,8 +429,8 @@ fun MainScreen() {
                             )
 
                             InfoCard(
-                                title = "当前画质 / 比例",
-                                content = "画质：$quality\n比例：${selectedSizeOption.title}\n实际尺寸：${selectedSizeOption.value}\n${selectedSizeOption.desc}"
+                                title = "当前尺寸",
+                                content = "选项：${selectedSizeOption.title}\n实际尺寸：${selectedSizeOption.value}\n${selectedSizeOption.desc}\n画质参数：$quality"
                             )
 
                             TextButton(onClick = { showAdvancedOptions = !showAdvancedOptions }) {
@@ -446,8 +439,15 @@ fun MainScreen() {
 
                             if (showAdvancedOptions) {
                                 InfoCard(
-                                    title = "比例说明",
+                                    title = "尺寸说明",
                                     content = ratioGuide.joinToString("\n")
+                                )
+
+                                AppDropdownField(
+                                    title = "画质",
+                                    selected = quality,
+                                    options = qualityOptions,
+                                    onSelected = { quality = it }
                                 )
 
                                 AppDropdownField(
