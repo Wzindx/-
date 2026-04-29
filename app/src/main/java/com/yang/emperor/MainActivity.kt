@@ -1595,7 +1595,7 @@ private fun AppEditableDropdownField(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Edit,
+                                imageVector = Icons.Default.Create,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
