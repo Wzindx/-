@@ -520,14 +520,14 @@ fun MainScreen() {
                             .padding(horizontal = 4.dp, vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        StatusCard(status)
-                        Spacer(Modifier.height(12.dp))
                         Text(
                             text = "通用图像工坊",
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold
                         )
+                        Spacer(Modifier.height(12.dp))
+                        StatusCard(status)
                     }
                 }
 
@@ -540,7 +540,7 @@ fun MainScreen() {
                             modifier = Modifier.padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            SectionTitle("创作", "输入描述，选择图片后自动切换为图生图。")
+                            SectionTitle("创作", "")
 
                             OutlinedTextField(
                                 value = prompt,
@@ -560,15 +560,50 @@ fun MainScreen() {
                                 shape = RoundedCornerShape(20.dp)
                             )
 
-                            ConfigEntryCard(
-                                title = "选择图片",
-                                primary = if (selectedImageBytes != null) "当前为图生图 / 编辑" else "当前为文生图",
-                                secondary = if (selectedImageBytes != null)
-                                    selectedImage?.lastPathSegment ?: "已选择图片"
-                                else
-                                    "点按直接选择图片；不选图片则文生图",
-                                onClick = { picker.launch("image/*") }
-                            )
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .clickable { picker.launch("image/*") },
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                shape = RoundedCornerShape(20.dp),
+                                tonalElevation = 1.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Text(
+                                            text = if (selectedImageBytes != null) "更换图片" else "选择图片",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        Text(
+                                            text = if (selectedImageBytes != null)
+                                                selectedImage?.lastPathSegment ?: "已选择图片，当前为图生图"
+                                            else
+                                                "不选图片则文生图",
+                                            color = Color(0xFF6B7280),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Text(
+                                        text = "›",
+                                        fontSize = 30.sp,
+                                        color = accent,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
 
                             if (isLoading) {
                                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -967,8 +1002,8 @@ private fun BottomNavButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val container = if (selected) accent else Color.Transparent
-    val content = if (selected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+    val container = if (selected) softAccent else Color.Transparent
+    val content = if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
     TextButton(
         onClick = onClick,
         modifier = modifier
@@ -1130,11 +1165,13 @@ private fun SectionTitle(title: String, desc: String) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
-        Text(
-            text = desc,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF6B7280)
-        )
+        if (desc.isNotBlank()) {
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF6B7280)
+            )
+        }
     }
 }
 
