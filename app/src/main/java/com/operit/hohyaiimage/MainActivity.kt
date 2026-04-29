@@ -11,6 +11,8 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import androidx.activity.ComponentActivity
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -203,7 +205,7 @@ private val errorText = Color(0xFFC03B3B)
 fun MainScreen() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val prefs = remember { context.getSharedPreferences("config", Context.MODE_PRIVATE) }
+    val prefs = remember { secureConfigPreferences(context) }
 
     var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
 
@@ -286,6 +288,19 @@ fun MainScreen() {
                 customEditModel = it
             },
             onBack = { currentRoute = ScreenRoute.MAIN },
+            onClearConfig = {
+                prefs.edit().clear().apply()
+                baseUrl = "https://api.openai.com/v1"
+                apiKey = ""
+                apiMode = ApiMode.IMAGES
+                generateModel = "gpt-image-2"
+                editModel = "gpt-image-1"
+                customGenerateModel = generateModel
+                customEditModel = editModel
+                history = emptyList()
+                status = "已清除接口配置、密钥和历史记录。"
+                currentRoute = ScreenRoute.MAIN
+            },
             onSave = {
                 prefs.edit()
                     .putString("baseUrl", baseUrl.trim())
@@ -676,6 +691,7 @@ private fun SettingsScreen(
     onCustomEditModelChange: (String) -> Unit,
     onSelectEditModel: (String) -> Unit,
     onBack: () -> Unit,
+    onClearConfig: () -> Unit,
     onSave: () -> Unit
 ) {
     Scaffold(
@@ -706,7 +722,12 @@ private fun SettingsScreen(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    SectionTitle("连接配置", "接口信息放入二级页面，不在首页直接裸露")
+                    SectionTitle("连接配置", "v1.7 起使用 Android Keystore 加密保存 API Key；root 环境仍无法做到绝对防护，但配置文件不再明文暴露")
+
+                    InfoCard(
+                        title = "安全存储说明",
+                        content = "API Key 已迁移到 EncryptedSharedPreferences。旧版明文配置会在首次启动时自动迁移并清理。"
+                    )
 
                     OutlinedTextField(
                         value = baseUrl,
@@ -777,6 +798,13 @@ private fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("保存接口设置")
+                    }
+
+                    TextButton(
+                        onClick = onClearConfig,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("清除密钥、配置和历史记录")
                     }
                 }
             }
@@ -1266,6 +1294,45 @@ fun saveToGallery(context: Context, bytes: ByteArray, format: String): String {
 
 fun now(): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
+
+fun secureConfigPreferences(context: Context): android.content.SharedPreferences {
+    val legacyPrefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
+
+    val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    val securePrefs = EncryptedSharedPreferences.create(
+        context,
+        "secure_config",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    if (!securePrefs.getBoolean("secureMigratedFromV16", false)) {
+        val editor = securePrefs.edit()
+        val keys = listOf("baseUrl", "apiKey", "apiMode", "generateModel", "editModel", "model", "history")
+        keys.forEach { key ->
+            val value = legacyPrefs.getString(key, null)
+            if (value != null) editor.putString(key, value)
+        }
+        editor.putBoolean("secureMigratedFromV16", true).apply()
+
+        legacyPrefs.edit()
+            .remove("baseUrl")
+            .remove("apiKey")
+            .remove("apiMode")
+            .remove("generateModel")
+            .remove("editModel")
+            .remove("model")
+            .remove("history")
+            .apply()
+    }
+
+    return securePrefs
+}
 
 fun loadHistory(prefs: android.content.SharedPreferences): List<HistoryItem> {
     val arr = JSONArray(prefs.getString("history", "[]") ?: "[]")
