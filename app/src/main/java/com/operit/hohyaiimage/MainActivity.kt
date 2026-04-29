@@ -69,6 +69,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -81,12 +82,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.operit.hohyaiimage.ui.theme.AppTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -138,7 +141,26 @@ data class HistoryItem(
     val mode: String,
     val model: String,
     val prompt: String,
-    val path: String
+    val path: String,
+    val state: String = "success",
+    val error: String = ""
+)
+
+data class ImageTask(
+    val id: String,
+    val time: String,
+    val mode: String,
+    val model: String,
+    val prompt: String,
+    val baseUrl: String,
+    val apiKey: String,
+    val apiMode: ApiMode,
+    val imageBytes: ByteArray?,
+    val size: String,
+    val quality: String,
+    val count: String,
+    val outputFormat: String,
+    val background: String
 )
 
 data class SizeOption(
@@ -239,12 +261,18 @@ fun MainScreen() {
     var showReferenceSheet by rememberSaveable { mutableStateOf(false) }
     var showModelSheet by rememberSaveable { mutableStateOf(false) }
     var showParamsSheet by rememberSaveable { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
+    var status by remember { mutableStateOf("") }
     var settingsNotice by remember { mutableStateOf("") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
     var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
+    var showOnboarding by rememberSaveable {
+        mutableStateOf(!prefs.getBoolean("onboardingDone", false) && (apiKey.isBlank() || baseUrl.isBlank()))
+    }
+    val taskQueue = remember { mutableStateListOf<ImageTask>() }
+    val runningTasks = remember { mutableStateListOf<String>() }
+    val isConfigured = baseUrl.isNotBlank() && apiKey.isNotBlank()
+    val runningCount = runningTasks.size
 
     val currentSizes = if (editMode) editSizes else generationSizes
     val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()
@@ -269,8 +297,118 @@ fun MainScreen() {
         }
         if (selectedImageBytes != null) {
             showReferenceSheet = false
-            status = "已选择参考图，将自动使用图生图 / 编辑模式。"
+            status = ""
         }
+    }
+
+    LaunchedEffect(taskQueue.size) {
+        while (taskQueue.isNotEmpty()) {
+            val task = taskQueue.removeAt(0)
+            runningTasks.add(task.id)
+            val runningItem = HistoryItem(
+                time = task.time,
+                mode = task.mode,
+                model = task.model,
+                prompt = task.prompt,
+                path = "后台处理中",
+                state = "running"
+            )
+            history = listOf(runningItem) + history.take(49)
+            saveHistory(prefs, history)
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    if (task.imageBytes != null) {
+                        when (task.apiMode) {
+                            ApiMode.IMAGES -> callEdit(
+                                baseUrl = task.baseUrl,
+                                apiKey = task.apiKey,
+                                model = task.model,
+                                prompt = task.prompt,
+                                imageBytes = task.imageBytes,
+                                size = task.size,
+                                quality = task.quality,
+                                outputFormat = task.outputFormat,
+                                background = task.background
+                            )
+                            ApiMode.RESPONSES -> callEditResponses(
+                                baseUrl = task.baseUrl,
+                                apiKey = task.apiKey,
+                                model = task.model,
+                                prompt = task.prompt,
+                                imageBytes = task.imageBytes,
+                                size = task.size,
+                                quality = task.quality,
+                                outputFormat = task.outputFormat,
+                                background = task.background
+                            )
+                            ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
+                                model = task.model,
+                                prompt = task.prompt,
+                                imageBytes = task.imageBytes,
+                                baseUrl = task.baseUrl,
+                                apiKey = task.apiKey,
+                                size = task.size,
+                                quality = task.quality
+                            )
+                        }
+                    } else {
+                        callGenerate(
+                            baseUrl = task.baseUrl,
+                            apiKey = task.apiKey,
+                            model = task.model,
+                            prompt = task.prompt,
+                            n = task.count.toIntOrNull() ?: 1,
+                            size = task.size,
+                            quality = task.quality
+                        )
+                    }
+                }
+                imageBytes = result
+                history = history.map {
+                    if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
+                        it.copy(path = "未下载", state = "success", error = "")
+                    } else it
+                }
+                saveHistory(prefs, history)
+                status = "后台任务完成，可在结果预览中查看或下载。"
+            } catch (e: Exception) {
+                history = history.map {
+                    if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
+                        it.copy(path = "失败", state = "failed", error = e.message ?: "未知错误")
+                    } else it
+                }
+                saveHistory(prefs, history)
+                status = "后台任务失败：${e.message}"
+            } finally {
+                runningTasks.remove(task.id)
+            }
+            delay(100)
+        }
+    }
+
+    if (showOnboarding) {
+        OnboardingScreen(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            onBaseUrlChange = { baseUrl = it },
+            onApiKeyChange = { apiKey = it },
+            onSkip = {
+                prefs.edit().putBoolean("onboardingDone", true).apply()
+                showOnboarding = false
+            },
+            onSave = {
+                prefs.edit()
+                    .putString("baseUrl", baseUrl.trim())
+                    .putString("apiKey", apiKey.trim())
+                    .putBoolean("onboardingDone", true)
+                    .apply()
+                settingsNotice = "接口信息已保存。"
+                status = ""
+                showOnboarding = false
+                currentRoute = ScreenRoute.MAIN
+            }
+        )
+        return
     }
 
     if (showReferenceSheet) {
@@ -479,6 +617,9 @@ fun MainScreen() {
                 settingsNotice = "已清除接口配置、密钥和历史记录，请重新填写接口设置。"
                 currentRoute = ScreenRoute.SETTINGS
             },
+            onShowOnboarding = {
+                showOnboarding = true
+            },
             onSave = {
                 prefs.edit()
                     .putString("baseUrl", baseUrl.trim())
@@ -487,9 +628,10 @@ fun MainScreen() {
                     .putString("generateModel", generateModel.trim())
                     .putString("editModel", editModel.trim())
                     .putString("model", generateModel.trim())
+                    .putBoolean("onboardingDone", true)
                     .apply()
                 settingsNotice = "接口设置已保存。"
-                status = "接口设置已保存，可以开始创建图像。"
+                status = ""
                 currentRoute = ScreenRoute.MAIN
             },
             outerPadding = settingsPadding
@@ -546,7 +688,9 @@ fun MainScreen() {
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             SectionTitle("创作", "")
-                            StatusCard(status)
+                            if (status.isNotBlank()) {
+                                StatusCard(status)
+                            }
 
                             OutlinedTextField(
                                 value = prompt,
@@ -610,8 +754,13 @@ fun MainScreen() {
                                 }
                             }
 
-                            if (isLoading) {
+                            if (runningCount > 0 || taskQueue.isNotEmpty()) {
                                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                Text(
+                                    text = "后台处理中：${runningCount} 个，排队：${taskQueue.size} 个",
+                                    color = Color(0xFF6B7280),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
 
                             Surface(
@@ -621,82 +770,31 @@ fun MainScreen() {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Button(
-                                    enabled = !isLoading,
+                                    enabled = prompt.isNotBlank() && isConfigured,
                                     onClick = {
-                                        scope.launch {
-                                            isLoading = true
-                                            status = "请求已发送，图像生成通常需要 30~180 秒。"
-                                            try {
-                                                val result = withContext(Dispatchers.IO) {
-                                                    if (selectedImageBytes != null) {
-                                                        when (apiMode) {
-                                                            ApiMode.IMAGES -> callEdit(
-                                                                baseUrl = baseUrl,
-                                                                apiKey = apiKey,
-                                                                model = editModel,
-                                                                prompt = prompt,
-                                                                imageBytes = selectedImageBytes,
-                                                                size = size,
-                                                                quality = quality,
-                                                                outputFormat = outputFormat,
-                                                                background = background
-                                                            )
-
-                                                            ApiMode.RESPONSES -> callEditResponses(
-                                                                baseUrl = baseUrl,
-                                                                apiKey = apiKey,
-                                                                model = editModel,
-                                                                prompt = prompt,
-                                                                imageBytes = selectedImageBytes,
-                                                                size = size,
-                                                                quality = quality,
-                                                                outputFormat = outputFormat,
-                                                                background = background
-                                                            )
-
-                                                            ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
-                                                                model = editModel,
-                                                                prompt = prompt,
-                                                                imageBytes = selectedImageBytes,
-                                                                baseUrl = baseUrl,
-                                                                apiKey = apiKey,
-                                                                size = size,
-                                                                quality = quality
-                                                            )
-                                                        }
-                                                    } else {
-                                                        callGenerate(
-                                                            baseUrl = baseUrl,
-                                                            apiKey = apiKey,
-                                                            model = generateModel,
-                                                            prompt = prompt,
-                                                            n = count.toIntOrNull() ?: 1,
-                                                            size = size,
-                                                            quality = quality
-                                                        )
-                                                    }
-                                                }
-                                                imageBytes = result
-                                                val item = HistoryItem(
-                                                    time = now(),
-                                                    mode = if (selectedImageBytes != null) "edit" else "generate",
-                                                    model = if (selectedImageBytes != null) editModel else generateModel,
-                                                    prompt = prompt,
-                                                    path = "未下载"
-                                                )
-                                                history = listOf(item) + history.take(29)
-                                                saveHistory(prefs, history)
-                                                status = "生成完成，可在结果预览中查看或下载到相册。"
-                                            } catch (e: Exception) {
-                                                status = "生成失败：${e.message}"
-                                            } finally {
-                                                isLoading = false
-                                            }
-                                        }
+                                        val task = ImageTask(
+                                            id = UUID.randomUUID().toString(),
+                                            time = now(),
+                                            mode = if (selectedImageBytes != null) "edit" else "generate",
+                                            model = if (selectedImageBytes != null) editModel else generateModel,
+                                            prompt = prompt,
+                                            baseUrl = baseUrl.trim(),
+                                            apiKey = apiKey.trim(),
+                                            apiMode = apiMode,
+                                            imageBytes = selectedImageBytes,
+                                            size = size,
+                                            quality = quality,
+                                            count = count,
+                                            outputFormat = outputFormat,
+                                            background = background
+                                        )
+                                        taskQueue.add(task)
+                                        status = "任务已加入后台队列，可继续提交新的生成任务。"
+                                        currentRoute = ScreenRoute.HISTORY
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(if (isLoading) "正在生成..." else if (selectedImageBytes != null) "开始编辑图像" else "开始生成图像")
+                                    Text(if (selectedImageBytes != null) "加入后台编辑队列" else "加入后台生成队列")
                                 }
                             }
 
@@ -818,9 +916,9 @@ fun MainScreen() {
                 }
                 item {
                     HistoryStatsCard(
-                        successCount = history.size,
-                        failedCount = 0,
-                        runningCount = if (isLoading) 1 else 0
+                        successCount = history.count { it.state == "success" },
+                        failedCount = history.count { it.state == "failed" },
+                        runningCount = history.count { it.state == "running" } + runningCount
                     )
                 }
 
@@ -840,6 +938,74 @@ fun MainScreen() {
                 } else {
                     items(history.take(30)) { item ->
                         HistoryCard(item)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun OnboardingScreen(
+    baseUrl: String,
+    apiKey: String,
+    onBaseUrlChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onSkip: () -> Unit,
+    onSave: () -> Unit
+) {
+    Scaffold(containerColor = pageBg) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            ElevatedCard(
+                colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                shape = RoundedCornerShape(32.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("欢迎使用通用图像工坊", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Text("首次使用需要先填写接口地址和 API Key。以后也可以在设置页重新打开引导。", color = Color(0xFF6B7280))
+                    OutlinedTextField(
+                        value = baseUrl,
+                        onValueChange = onBaseUrlChange,
+                        label = { Text("Base URL") },
+                        placeholder = { Text("例如：https://api.openai.com/v1") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = onApiKeyChange,
+                        label = { Text("API Key") },
+                        placeholder = { Text("输入你的密钥") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                    Button(
+                        onClick = onSave,
+                        enabled = baseUrl.isNotBlank() && apiKey.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("保存并开始使用")
+                    }
+                    TextButton(
+                        onClick = onSkip,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("暂不设置，进入应用")
                     }
                 }
             }
@@ -968,8 +1134,8 @@ private fun BottomNavigationBar(
     onRouteSelected: (ScreenRoute) -> Unit
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 4.dp
+        color = Color(0xFFF7F8FC),
+        tonalElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
@@ -1007,13 +1173,11 @@ private fun BottomNavButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val container = if (selected) softAccent else Color.Transparent
-    val content = if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f)
+    val content = if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
     TextButton(
         onClick = onClick,
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(container)
     ) {
         Text(text, color = content, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
     }
@@ -1040,6 +1204,7 @@ private fun SettingsScreen(
     settingsNotice: String,
     onBack: () -> Unit,
     onClearConfig: () -> Unit,
+    onShowOnboarding: () -> Unit,
     onSave: () -> Unit,
     outerPadding: PaddingValues = PaddingValues()
 ) {
@@ -1093,6 +1258,13 @@ private fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("保存连接设置")
+                    }
+
+                    TextButton(
+                        onClick = onShowOnboarding,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("再来一次引导")
                     }
 
                     TextButton(
@@ -1373,14 +1545,19 @@ private fun HistoryCard(item: HistoryItem) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    val pill = when (item.state) {
+                        "running" -> Triple("处理中", Color(0xFFFFF3D6), Color(0xFFD97706))
+                        "failed" -> Triple("处理失败", Color(0xFFFFE4E6), Color(0xFFE11D48))
+                        else -> Triple("处理成功", Color(0xFFDFFBEA), Color(0xFF15803D))
+                    }
                     StatusPill(
-                        text = "处理成功",
-                        bg = Color(0xFFDFFBEA),
-                        fg = Color(0xFF15803D)
+                        text = pill.first,
+                        bg = pill.second,
+                        fg = pill.third
                     )
                 }
                 Text(
-                    text = "图片信息：1024x1024",
+                    text = if (item.error.isNotBlank()) "错误：${item.error}" else "图片信息：${item.path}",
                     color = Color(0xFF4B5563),
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -1794,23 +1971,28 @@ fun secureConfigPreferences(context: Context): android.content.SharedPreferences
 }
 
 fun loadHistory(prefs: android.content.SharedPreferences): List<HistoryItem> {
-    val arr = JSONArray(prefs.getString("history", "[]") ?: "[]")
-    return (0 until arr.length()).mapNotNull { i ->
-        arr.optJSONObject(i)?.let {
-            HistoryItem(
-                it.optString("time"),
-                it.optString("mode"),
-                it.optString("model"),
-                it.optString("prompt"),
-                it.optString("path")
-            )
+    val raw = prefs.getString("history", "[]") ?: "[]"
+    return runCatching {
+        val arr = JSONArray(raw)
+        (0 until arr.length()).mapNotNull { i ->
+            arr.optJSONObject(i)?.let {
+                HistoryItem(
+                    time = it.optString("time"),
+                    mode = it.optString("mode"),
+                    model = it.optString("model"),
+                    prompt = it.optString("prompt"),
+                    path = it.optString("path"),
+                    state = it.optString("state", "success"),
+                    error = it.optString("error", "")
+                )
+            }
         }
-    }
+    }.getOrElse { emptyList() }
 }
 
 fun saveHistory(prefs: android.content.SharedPreferences, items: List<HistoryItem>) {
     val arr = JSONArray()
-    items.forEach {
+    items.take(50).forEach {
         arr.put(
             JSONObject()
                 .put("time", it.time)
@@ -1818,8 +2000,9 @@ fun saveHistory(prefs: android.content.SharedPreferences, items: List<HistoryIte
                 .put("model", it.model)
                 .put("prompt", it.prompt)
                 .put("path", it.path)
+                .put("state", it.state)
+                .put("error", it.error)
         )
     }
     prefs.edit().putString("history", arr.toString()).apply()
 }
-
