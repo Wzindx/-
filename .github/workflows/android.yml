@@ -60,10 +60,6 @@ jobs:
         shell: bash
         run: |
           set +e
-          unset ANDROID_KEYSTORE_PATH
-          unset ANDROID_KEYSTORE_PASSWORD
-          unset ANDROID_KEY_ALIAS
-          unset ANDROID_KEY_PASSWORD
           $GRADLE_CMD :app:assembleRelease --no-daemon --stacktrace --info 2>&1 | tee build-release.log
           echo "${PIPESTATUS[0]}" > build-release-exit-code.txt
           exit 0
@@ -88,6 +84,7 @@ jobs:
           name: universal-image-studio-release-apk
           path: dist-release/*.apk
           if-no-files-found: ignore
+          retention-days: 1
 
       - name: Upload Build Logs
         uses: actions/upload-artifact@v4
@@ -100,35 +97,7 @@ jobs:
             build-release.log
             build-release-exit-code.txt
           if-no-files-found: ignore
-
-      - name: Commit Build Report
-        if: always() && github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip ci]')
-        shell: bash
-        run: |
-          mkdir -p build-report
-          cp build-debug.log build-report/build-debug.log || true
-          cp build-debug-exit-code.txt build-report/build-debug-exit-code.txt || true
-          cp build-release.log build-report/build-release.log || true
-          cp build-release-exit-code.txt build-report/build-release-exit-code.txt || true
-
-          if find dist-release -type f -iname '*.apk' -print -quit | grep -q .; then
-            echo 0 > build-report/build-exit-code.txt
-            echo "Release APK build succeeded." > build-report/summary.txt
-          elif find dist-debug -type f -iname '*.apk' -print -quit | grep -q .; then
-            echo 0 > build-report/build-exit-code.txt
-            echo "Debug APK build succeeded; release APK missing." > build-report/summary.txt
-          else
-            echo 1 > build-report/build-exit-code.txt
-            echo "APK build failed. Check build-debug.log and build-release.log." > build-report/summary.txt
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add build-report/
-          if ! git diff --cached --quiet; then
-            git commit -m "Update build report [skip ci]"
-            git push
-          fi
+          retention-days: 1
 
       - name: Validate APK Exists
         shell: bash
