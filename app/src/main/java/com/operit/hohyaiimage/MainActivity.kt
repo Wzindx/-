@@ -319,54 +319,45 @@ fun MainScreen() {
         )
 
         ScreenRoute.MAIN -> Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface,
-            topBar = {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(horizontal = 20.dp, vertical = 18.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "通用图像工坊",
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    text = "首页聚焦任务创建，接口配置移入二级页面，交互更轻量",
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {
-                                Text("接口设置", color = MaterialTheme.colorScheme.onSurface)
-                            }
-                        }
-                    }
-                }
-            }
+            containerColor = MaterialTheme.colorScheme.surface
         ) { padding ->
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .navigationBarsPadding(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "通用图像工坊",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "首页聚焦任务创建，接口配置移入二级页面，交互更轻量",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {
+                            Text("接口设置", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+
                 item {
                     ElevatedCard(
                         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
