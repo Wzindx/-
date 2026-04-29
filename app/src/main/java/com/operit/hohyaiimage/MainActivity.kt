@@ -231,6 +231,7 @@ fun MainScreen() {
     var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
     var isLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
+    var settingsNotice by remember { mutableStateOf("") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
     var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
@@ -287,6 +288,7 @@ fun MainScreen() {
                 editModel = it
                 customEditModel = it
             },
+            settingsNotice = settingsNotice,
             onBack = { currentRoute = ScreenRoute.MAIN },
             onClearConfig = {
                 prefs.edit().clear().apply()
@@ -298,7 +300,7 @@ fun MainScreen() {
                 customGenerateModel = generateModel
                 customEditModel = editModel
                 history = emptyList()
-                status = "已清除接口配置、密钥和历史记录，请重新填写接口设置。"
+                settingsNotice = "已清除接口配置、密钥和历史记录，请重新填写接口设置。"
                 currentRoute = ScreenRoute.SETTINGS
             },
             onSave = {
@@ -310,7 +312,8 @@ fun MainScreen() {
                     .putString("editModel", editModel.trim())
                     .putString("model", generateModel.trim())
                     .apply()
-                status = "接口设置已保存。"
+                settingsNotice = "接口设置已保存。"
+                status = "接口设置已保存，可以开始创建图像。"
                 currentRoute = ScreenRoute.MAIN
             }
         )
@@ -691,6 +694,7 @@ private fun SettingsScreen(
     onSelectGenerateModel: (String) -> Unit,
     onCustomEditModelChange: (String) -> Unit,
     onSelectEditModel: (String) -> Unit,
+    settingsNotice: String,
     onBack: () -> Unit,
     onClearConfig: () -> Unit,
     onSave: () -> Unit
@@ -801,6 +805,10 @@ private fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("清除密钥、配置和历史记录")
+                    }
+
+                    if (settingsNotice.isNotBlank()) {
+                        StatusCard(settingsNotice)
                     }
                 }
             }
