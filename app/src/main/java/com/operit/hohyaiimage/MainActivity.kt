@@ -444,11 +444,6 @@ fun MainScreen() {
                                 }
                             )
 
-                            InfoCard(
-                                title = "当前尺寸",
-                                content = "选项：${selectedSizeOption.title}\n实际尺寸：${selectedSizeOption.value}\n${selectedSizeOption.desc}\n画质参数：$quality"
-                            )
-
                             TextButton(onClick = { showAdvancedOptions = !showAdvancedOptions }) {
                                 Text(if (showAdvancedOptions) "收起高级参数" else "展开高级参数")
                             }
@@ -680,14 +675,14 @@ private fun SettingsScreen(
     onSave: () -> Unit
 ) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = pageBg,
         topBar = {
             TopAppBar(
                 title = { Text("接口设置") },
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("返回") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = pageBg)
             )
         }
     ) { padding ->
@@ -696,12 +691,13 @@ private fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp, vertical = 18.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ElevatedCard(
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                shape = RoundedCornerShape(24.dp)
+                colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                shape = RoundedCornerShape(28.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
@@ -739,37 +735,21 @@ private fun SettingsScreen(
                         }
                     )
 
-                    OutlinedTextField(
+                    AppEditableDropdownField(
+                        title = "文生图模型 ID",
                         value = customGenerateModel,
-                        onValueChange = onCustomGenerateModelChange,
-                        label = { Text("文生图模型 ID") },
-                        placeholder = { Text("支持手动输入自定义文生图模型") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
-                    )
-
-                    AppDropdownField(
-                        title = "推荐文生图模型",
-                        selected = currentGenerateModel,
                         options = recommendedModels,
+                        placeholder = "可手动输入，也可从推荐模型中选择",
+                        onValueChange = onCustomGenerateModelChange,
                         onSelected = onSelectGenerateModel
                     )
 
-                    OutlinedTextField(
+                    AppEditableDropdownField(
+                        title = "图生图模型 ID",
                         value = customEditModel,
-                        onValueChange = onCustomEditModelChange,
-                        label = { Text("图生图模型 ID") },
-                        placeholder = { Text("支持手动输入自定义图生图模型") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
-                    )
-
-                    AppDropdownField(
-                        title = "推荐图生图模型",
-                        selected = currentEditModel,
                         options = recommendedModels,
+                        placeholder = "可手动输入，也可从推荐模型中选择",
+                        onValueChange = onCustomEditModelChange,
                         onSelected = onSelectEditModel
                     )
 
@@ -860,6 +840,63 @@ private fun AppDropdownField(
                 value = selected,
                 onValueChange = {},
                 readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {
+                            onSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppEditableDropdownField(
+    title: String,
+    value: String,
+    options: List<String>,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = { Text(placeholder) },
+                singleLine = true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier
                     .menuAnchor()
