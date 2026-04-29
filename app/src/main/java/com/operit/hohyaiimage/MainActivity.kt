@@ -886,16 +886,7 @@ private fun SettingsScreen(
     outerPadding: PaddingValues = PaddingValues()
 ) {
     Scaffold(
-        containerColor = pageBg,
-        topBar = {
-            TopAppBar(
-                title = { Text("接口设置") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("返回") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = pageBg)
-            )
-        }
+        containerColor = pageBg
     ) { padding ->
         Column(
             modifier = Modifier
