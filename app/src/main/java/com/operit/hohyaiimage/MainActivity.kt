@@ -233,6 +233,8 @@ fun MainScreen() {
     var selectedImage by remember { mutableStateOf(null as Uri?) }
     var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
     var showReferenceSheet by rememberSaveable { mutableStateOf(false) }
+    var showModelSheet by rememberSaveable { mutableStateOf(false) }
+    var showParamsSheet by rememberSaveable { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
     var settingsNotice by remember { mutableStateOf("") }
@@ -308,6 +310,124 @@ fun MainScreen() {
                 }
             },
             shape = RoundedCornerShape(24.dp)
+        )
+    }
+
+    if (showModelSheet) {
+        AlertDialog(
+            onDismissRequest = { showModelSheet = false },
+            title = { Text("接口与模型") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("修改后会自动保存。", color = Color(0xFF6B7280))
+                    AppDropdownField(
+                        title = "接口模式",
+                        selected = apiMode.label,
+                        options = ApiMode.entries.map { it.label },
+                        onSelected = { label ->
+                            ApiMode.entries.firstOrNull { it.label == label }?.let { apiMode = it }
+                        }
+                    )
+                    AppEditableDropdownField(
+                        title = "文生图模型 ID",
+                        value = customGenerateModel,
+                        options = imageModels,
+                        placeholder = "可手动输入，也可从推荐模型中选择",
+                        onValueChange = {
+                            customGenerateModel = it
+                            generateModel = it
+                        },
+                        onSelected = {
+                            customGenerateModel = it
+                            generateModel = it
+                        }
+                    )
+                    AppEditableDropdownField(
+                        title = "图生图模型 ID",
+                        value = customEditModel,
+                        options = imageModels,
+                        placeholder = "可手动输入，也可从推荐模型中选择",
+                        onValueChange = {
+                            customEditModel = it
+                            editModel = it
+                        },
+                        onSelected = {
+                            customEditModel = it
+                            editModel = it
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    prefs.edit()
+                        .putString("apiMode", apiMode.value)
+                        .putString("generateModel", generateModel.trim())
+                        .putString("editModel", editModel.trim())
+                        .putString("model", generateModel.trim())
+                        .apply()
+                    status = "接口与模型已保存。"
+                    showModelSheet = false
+                }) {
+                    Text("完成")
+                }
+            },
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
+
+    if (showParamsSheet) {
+        AlertDialog(
+            onDismissRequest = { showParamsSheet = false },
+            title = { Text("生成参数") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    AppDropdownField(
+                        title = "尺寸 / 比例",
+                        selected = selectedSizeOption.title + " · " + selectedSizeOption.value,
+                        options = currentSizes.map { "${it.title} · ${it.value}" },
+                        onSelected = { display ->
+                            currentSizes.firstOrNull {
+                                "${it.title} · ${it.value}" == display
+                            }?.let { size = it.value }
+                        }
+                    )
+                    InfoCard(
+                        title = "尺寸说明",
+                        content = ratioGuide.joinToString("\n")
+                    )
+                    AppDropdownField(
+                        title = "画质",
+                        selected = quality,
+                        options = qualityOptions,
+                        onSelected = { quality = it }
+                    )
+                    AppDropdownField(
+                        title = "输出格式",
+                        selected = outputFormat,
+                        options = outputFormats,
+                        onSelected = { outputFormat = it }
+                    )
+                    AppDropdownField(
+                        title = "背景",
+                        selected = background,
+                        options = backgroundOptions,
+                        onSelected = { background = it }
+                    )
+                    AppDropdownField(
+                        title = "生成数量",
+                        selected = count,
+                        options = (1..10).map { it.toString() },
+                        onSelected = { count = it }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showParamsSheet = false }) {
+                    Text("完成")
+                }
+            },
+            shape = RoundedCornerShape(28.dp)
         )
     }
 
