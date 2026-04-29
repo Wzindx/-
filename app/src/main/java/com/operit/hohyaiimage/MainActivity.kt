@@ -43,6 +43,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -62,11 +63,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -237,7 +233,6 @@ fun MainScreen() {
     var selectedImage by remember { mutableStateOf(null as Uri?) }
     var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
     var showReferenceSheet by rememberSaveable { mutableStateOf(false) }
-    val referenceSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
     var settingsNotice by remember { mutableStateOf("") }
@@ -273,49 +268,47 @@ fun MainScreen() {
     }
 
     if (showReferenceSheet) {
-        ModalBottomSheet(
+        AlertDialog(
             onDismissRequest = { showReferenceSheet = false },
-            sheetState = referenceSheetState
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                SectionTitle("参考图", "选择参考图后会自动切换为图生图 / 编辑；清除后自动回到文生图")
-                if (selectedImage != null) {
-                    StatusCard(
-                        if (selectedImageBytes != null)
-                            "当前参考图：${selectedImage?.lastPathSegment ?: "已选择图片"}"
-                        else
-                            "已记录参考图 URI，但图片缓存读取失败，请重新选择"
+            title = { Text("参考图") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "选择参考图后会自动切换为图生图 / 编辑；清除后自动回到文生图",
+                        color = Color(0xFF6B7280)
                     )
-                } else {
-                    Text("当前未选择参考图，将使用文生图模式。", color = Color(0xFF6B7280))
+                    if (selectedImage != null) {
+                        StatusCard(
+                            if (selectedImageBytes != null)
+                                "当前参考图：${selectedImage?.lastPathSegment ?: "已选择图片"}"
+                            else
+                                "已记录参考图 URI，但图片缓存读取失败，请重新选择"
+                        )
+                    } else {
+                        Text("当前未选择参考图，将使用文生图模式。", color = Color(0xFF6B7280))
+                    }
                 }
-                Button(
-                    onClick = { picker.launch("image/*") },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+            },
+            confirmButton = {
+                TextButton(onClick = { picker.launch("image/*") }) {
                     Text(if (selectedImage == null) "选择参考图" else "更换参考图")
                 }
-                OutlinedButton(
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = selectedImage != null || selectedImageBytes != null,
                     onClick = {
                         selectedImage = null
                         selectedImageBytes = null
                         showReferenceSheet = false
                         status = "已清除参考图，将自动使用文生图模式。"
-                    },
-                    enabled = selectedImage != null || selectedImageBytes != null,
-                    modifier = Modifier.fillMaxWidth()
+                    }
                 ) {
-                    Text("清除参考图，使用文生图")
+                    Text("清除参考图")
                 }
-                Spacer(Modifier.height(8.dp))
-            }
-        }
+            },
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 
     when (currentRoute) {
@@ -746,25 +739,55 @@ private fun BottomNavigationBar(
     currentRoute: ScreenRoute,
     onRouteSelected: (ScreenRoute) -> Unit
 ) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        NavigationBarItem(
-            selected = currentRoute == ScreenRoute.MAIN,
-            onClick = { onRouteSelected(ScreenRoute.MAIN) },
-            icon = { Text("创") },
-            label = { Text("创作") }
-        )
-        NavigationBarItem(
-            selected = currentRoute == ScreenRoute.HISTORY,
-            onClick = { onRouteSelected(ScreenRoute.HISTORY) },
-            icon = { Text("历") },
-            label = { Text("历史") }
-        )
-        NavigationBarItem(
-            selected = currentRoute == ScreenRoute.SETTINGS,
-            onClick = { onRouteSelected(ScreenRoute.SETTINGS) },
-            icon = { Text("设") },
-            label = { Text("设置") }
-        )
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            BottomNavButton(
+                text = "创作",
+                selected = currentRoute == ScreenRoute.MAIN,
+                modifier = Modifier.weight(1f),
+                onClick = { onRouteSelected(ScreenRoute.MAIN) }
+            )
+            BottomNavButton(
+                text = "历史",
+                selected = currentRoute == ScreenRoute.HISTORY,
+                modifier = Modifier.weight(1f),
+                onClick = { onRouteSelected(ScreenRoute.HISTORY) }
+            )
+            BottomNavButton(
+                text = "设置",
+                selected = currentRoute == ScreenRoute.SETTINGS,
+                modifier = Modifier.weight(1f),
+                onClick = { onRouteSelected(ScreenRoute.SETTINGS) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun BottomNavButton(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val container = if (selected) accent else Color.Transparent
+    val content = if (selected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+    TextButton(
+        onClick = onClick,
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(container)
+    ) {
+        Text(text, color = content, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
     }
 }
 
