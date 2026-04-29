@@ -47,6 +47,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DividerDefaults
@@ -87,9 +88,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.yang.emperor.ui.theme.AppTheme
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -233,6 +235,7 @@ private val errorText = Color(0xFFC03B3B)
 @Composable
 fun MainScreen() {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val backgroundScope = LocalLifecycleOwner.current.lifecycle.coroutineScope
     val prefs = remember { secureConfigPreferences(context) }
 
     var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
@@ -301,7 +304,7 @@ fun MainScreen() {
 
 
     fun startBackgroundTask(task: ImageTask) {
-        lifecycleScope.launch {
+        backgroundScope.launch {
             runningTasks.add(task.id)
             val runningItem = HistoryItem(
                 time = task.time,

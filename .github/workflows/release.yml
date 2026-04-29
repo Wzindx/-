@@ -155,7 +155,8 @@ jobs:
             - 优化底部导航选中样式。
 
             ### 安装
-            下载下方 `app-release.apk` 安装即可。\n            - 包名：`com.yang.emperor`
+            下载下方 `app-release.apk` 安装即可。
+            - 包名：`com.yang.emperor`
             升级后如接口异常，请在设置页重新保存 Base URL 和 API Key。
           draft: false
           prerelease: false
