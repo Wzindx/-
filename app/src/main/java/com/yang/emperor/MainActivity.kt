@@ -947,7 +947,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     HistoryStatsCard(
                         successCount = history.count { it.state == "success" },
                         failedCount = history.count { it.state == "failed" },
-                        runningCount = history.count { it.state == "running" } + runningCount
+                        runningCount = history.count { it.state == "running" }
                     )
                 }
 
@@ -1430,7 +1430,8 @@ private fun AppDropdownField(
             )
             ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false }
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.heightIn(max = 280.dp)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1487,7 +1488,8 @@ private fun AppEditableDropdownField(
             )
             ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false }
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.heightIn(max = 280.dp)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(

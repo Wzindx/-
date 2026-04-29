@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.yang.emperor"
-    compileSdk = 34
+    compileSdk = 36
 
     val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
     val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
@@ -33,7 +33,7 @@ android {
     defaultConfig {
         applicationId = "com.yang.emperor"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 10
         versionName = "1.8"
     }
