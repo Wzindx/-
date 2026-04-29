@@ -298,8 +298,8 @@ fun MainScreen() {
                 customGenerateModel = generateModel
                 customEditModel = editModel
                 history = emptyList()
-                status = "已清除接口配置、密钥和历史记录。"
-                currentRoute = ScreenRoute.MAIN
+                status = "已清除接口配置、密钥和历史记录，请重新填写接口设置。"
+                currentRoute = ScreenRoute.SETTINGS
             },
             onSave = {
                 prefs.edit()
