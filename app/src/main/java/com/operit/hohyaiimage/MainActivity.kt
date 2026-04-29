@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -112,6 +113,7 @@ class MainActivity : ComponentActivity() {
 
 private enum class ScreenRoute {
     MAIN,
+    HISTORY,
     SETTINGS
 }
 
@@ -209,7 +211,7 @@ fun MainScreen() {
 
     var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
 
-    BackHandler(enabled = currentRoute == ScreenRoute.SETTINGS) {
+    BackHandler(enabled = currentRoute != ScreenRoute.MAIN) {
         currentRoute = ScreenRoute.MAIN
     }
 
@@ -229,16 +231,21 @@ fun MainScreen() {
     var editMode by rememberSaveable { mutableStateOf(false) }
     var selectedImage by remember { mutableStateOf(null as Uri?) }
     var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
+    var showReferenceSheet by rememberSaveable { mutableStateOf(false) }
+    val referenceSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
     var settingsNotice by remember { mutableStateOf("") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
     var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
-    var showHistory by rememberSaveable { mutableStateOf(false) }
 
     val currentSizes = if (editMode) editSizes else generationSizes
     val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()
+
+    LaunchedEffect(selectedImageBytes) {
+        editMode = selectedImageBytes != null
+    }
 
     LaunchedEffect(editMode) {
         if (currentSizes.none { it.value == size }) {
@@ -251,16 +258,72 @@ fun MainScreen() {
         selectedImageBytes = runCatching {
             uri?.let { readAllBytes(context, it) }
         }.getOrNull()
-        if (uri != null) {
-            editMode = true
-            if (selectedImageBytes == null) {
-                status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"
+        if (uri != null && selectedImageBytes == null) {
+            status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"
+        }
+        if (selectedImageBytes != null) {
+            showReferenceSheet = false
+            status = "已选择参考图，将自动使用图生图 / 编辑模式。"
+        }
+    }
+
+    if (showReferenceSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showReferenceSheet = false },
+            sheetState = referenceSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                SectionTitle("参考图", "选择参考图后会自动切换为图生图 / 编辑；清除后自动回到文生图")
+                if (selectedImage != null) {
+                    StatusCard(
+                        if (selectedImageBytes != null)
+                            "当前参考图：${selectedImage?.lastPathSegment ?: "已选择图片"}"
+                        else
+                            "已记录参考图 URI，但图片缓存读取失败，请重新选择"
+                    )
+                } else {
+                    Text("当前未选择参考图，将使用文生图模式。", color = Color(0xFF6B7280))
+                }
+                Button(
+                    onClick = { picker.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (selectedImage == null) "选择参考图" else "更换参考图")
+                }
+                OutlinedButton(
+                    onClick = {
+                        selectedImage = null
+                        selectedImageBytes = null
+                        showReferenceSheet = false
+                        status = "已清除参考图，将自动使用文生图模式。"
+                    },
+                    enabled = selectedImage != null || selectedImageBytes != null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("清除参考图，使用文生图")
+                }
+                Spacer(Modifier.height(8.dp))
             }
         }
     }
 
     when (currentRoute) {
-        ScreenRoute.SETTINGS -> SettingsScreen(
+        ScreenRoute.SETTINGS -> Scaffold(
+            containerColor = pageBg,
+            bottomBar = {
+                BottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onRouteSelected = { currentRoute = it }
+                )
+            }
+        ) { settingsPadding ->
+            SettingsScreen(
             baseUrl = baseUrl,
             apiKey = apiKey,
             apiMode = apiMode,
@@ -315,11 +378,19 @@ fun MainScreen() {
                 settingsNotice = "接口设置已保存。"
                 status = "接口设置已保存，可以开始创建图像。"
                 currentRoute = ScreenRoute.MAIN
-            }
+            },
+            outerPadding = settingsPadding
         )
+        }
 
         ScreenRoute.MAIN -> Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface,
+            bottomBar = {
+                BottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onRouteSelected = { currentRoute = it }
+                )
+            }
         ) { padding ->
             LazyColumn(
                 modifier = Modifier
@@ -351,8 +422,13 @@ fun MainScreen() {
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
-                        TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {
-                            Text("接口设置", color = MaterialTheme.colorScheme.onSurface)
+                        Column(horizontalAlignment = Alignment.End) {
+                            TextButton(onClick = { showReferenceSheet = true }) {
+                                Text("参考图", color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            TextButton(onClick = { currentRoute = ScreenRoute.SETTINGS }) {
+                                Text("接口设置", color = MaterialTheme.colorScheme.onSurface)
+                            }
                         }
                     }
                 }
@@ -367,14 +443,38 @@ fun MainScreen() {
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             SectionTitle("创建任务", "首页只保留核心创作流程，接口与模型请到二级设置页维护")
-                            AppDropdownField(
-                                title = "创作模式",
-                                selected = if (editMode) "图生图 / 编辑" else "文生图",
-                                options = listOf("文生图", "图生图 / 编辑"),
-                                onSelected = { mode ->
-                                    editMode = mode == "图生图 / 编辑"
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (selectedImageBytes != null) "当前为图生图 / 编辑" else "当前为文生图",
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = if (selectedImageBytes != null)
+                                                selectedImage?.lastPathSegment ?: "已选择参考图"
+                                            else
+                                                "未选择参考图，输入描述即可生成",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF6B7280),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    TextButton(onClick = { showReferenceSheet = true }) {
+                                        Text("参考图")
+                                    }
                                 }
-                            )
+                            }
 
                             OutlinedTextField(
                                 value = prompt,
@@ -393,51 +493,6 @@ fun MainScreen() {
                                     .heightIn(min = 140.dp),
                                 shape = RoundedCornerShape(20.dp)
                             )
-
-                            if (editMode) {
-                                Card(
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-                                    shape = RoundedCornerShape(18.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(14.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = selectedImage?.lastPathSegment ?: "当前未选择图片",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                if (selectedImage != null) {
-                                                    Text(
-                                                        text = if (selectedImageBytes != null) "参考图已缓存，可直接用于编辑" else "参考图 URI 已记录，但缓存读取失败",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = if (selectedImageBytes != null) successText else errorText
-                                                    )
-                                                } else {
-                                                    Text(
-                                                        text = "选择一张图片作为编辑参考",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = Color(0xFF6B7280)
-                                                    )
-                                                }
-                                            }
-                                            TextButton(onClick = { picker.launch("image/*") }) {
-                                                Text("选择参考图")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
 
                             SectionTitle("尺寸 / 比例", "当前接口按固定尺寸传参，比例与实际分辨率绑定显示，避免误解为可任意组合")
 
@@ -503,7 +558,7 @@ fun MainScreen() {
                                         status = "请求已发送，图像生成通常需要 30~180 秒。"
                                         try {
                                             val result = withContext(Dispatchers.IO) {
-                                                if (editMode) {
+                                                if (selectedImageBytes != null) {
                                                     when (apiMode) {
                                                         ApiMode.IMAGES -> callEdit(
                                                             baseUrl = baseUrl,
@@ -555,8 +610,8 @@ fun MainScreen() {
                                             val saved = saveToGallery(context, result, outputFormat)
                                             val item = HistoryItem(
                                                 time = now(),
-                                                mode = if (editMode) "edit" else "generate",
-                                                model = if (editMode) editModel else generateModel,
+                                                mode = if (selectedImageBytes != null) "edit" else "generate",
+                                                model = if (selectedImageBytes != null) editModel else generateModel,
                                                 prompt = prompt,
                                                 path = saved
                                             )
@@ -572,7 +627,7 @@ fun MainScreen() {
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(if (isLoading) "正在生成..." else if (editMode) "开始编辑图像" else "开始生成图像")
+                                Text(if (isLoading) "正在生成..." else if (selectedImageBytes != null) "开始编辑图像" else "开始生成图像")
                             }
 
                             StatusCard(status)
@@ -617,45 +672,93 @@ fun MainScreen() {
                     }
                 }
 
+            }
+        }
+
+        ScreenRoute.HISTORY -> Scaffold(
+            containerColor = MaterialTheme.colorScheme.surface,
+            bottomBar = {
+                BottomNavigationBar(
+                    currentRoute = currentRoute,
+                    onRouteSelected = { currentRoute = it }
+                )
+            }
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 item {
-                    ElevatedCard(
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                        shape = RoundedCornerShape(24.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                SectionTitle("历史记录", "默认收起，避免首页一次性渲染过多条目")
-                                TextButton(onClick = { showHistory = !showHistory }) {
-                                    Text(if (showHistory) "收起" else "展开")
-                                }
-                            }
-                            if (showHistory) {
-                                if (history.isEmpty()) {
-                                    Text("暂无历史记录", color = Color.Gray)
-                                } else {
-                                    history.take(8).forEachIndexed { index, item ->
-                                        HistoryCard(item)
-                                        if (index != minOf(history.size, 8) - 1) {
-                                            HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.45f))
-                                        }
-                                    }
-                                    if (history.size > 8) {
-                                        Text("仅显示最近 8 条，其余记录仍已保留。", color = Color.Gray)
-                                    }
-                                }
-                            }
+                        Column {
+                            Text("历史记录", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text("最近生成与编辑结果", color = Color(0xFF6B7280))
                         }
+                        TextButton(onClick = {
+                            history = emptyList()
+                            saveHistory(prefs, history)
+                            status = "历史记录已清空。"
+                        }) {
+                            Text("清空")
+                        }
+                    }
+                }
+                if (history.isEmpty()) {
+                    item {
+                        ElevatedCard(
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Text(
+                                "暂无历史记录",
+                                modifier = Modifier.padding(18.dp),
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                } else {
+                    items(history.take(30)) { item ->
+                        HistoryCard(item)
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BottomNavigationBar(
+    currentRoute: ScreenRoute,
+    onRouteSelected: (ScreenRoute) -> Unit
+) {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        NavigationBarItem(
+            selected = currentRoute == ScreenRoute.MAIN,
+            onClick = { onRouteSelected(ScreenRoute.MAIN) },
+            icon = { Text("创") },
+            label = { Text("创作") }
+        )
+        NavigationBarItem(
+            selected = currentRoute == ScreenRoute.HISTORY,
+            onClick = { onRouteSelected(ScreenRoute.HISTORY) },
+            icon = { Text("历") },
+            label = { Text("历史") }
+        )
+        NavigationBarItem(
+            selected = currentRoute == ScreenRoute.SETTINGS,
+            onClick = { onRouteSelected(ScreenRoute.SETTINGS) },
+            icon = { Text("设") },
+            label = { Text("设置") }
+        )
     }
 }
 
@@ -680,7 +783,8 @@ private fun SettingsScreen(
     settingsNotice: String,
     onBack: () -> Unit,
     onClearConfig: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    outerPadding: PaddingValues = PaddingValues()
 ) {
     Scaffold(
         containerColor = pageBg,
@@ -698,6 +802,7 @@ private fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .padding(outerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 18.dp)
                 .navigationBarsPadding(),
