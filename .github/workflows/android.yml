@@ -77,18 +77,9 @@ jobs:
           find app/build/outputs -type f -iname '*release*.apk' -exec cp {} dist-release/ \; 2>/dev/null || true
           echo "All APK outputs:"
           find app/build/outputs -type f -iname '*.apk' -print 2>/dev/null || true
-          echo "Debug artifacts:"
-          find dist-debug -type f -print || true
+          echo "Debug artifacts are intentionally not uploaded."
           echo "Release artifacts:"
           find dist-release -type f -print || true
-
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: universal-image-studio-debug-apk
-          path: dist-debug/*.apk
-          if-no-files-found: ignore
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
