@@ -526,8 +526,6 @@ fun MainScreen() {
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(Modifier.height(12.dp))
-                        StatusCard(status)
                     }
                 }
 
@@ -540,7 +538,8 @@ fun MainScreen() {
                             modifier = Modifier.padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            SectionTitle("创作", "")
+                            SectionTitle("创作", "输入描述，选择图片后自动切换为图生图。")
+                            StatusCard(status)
 
                             OutlinedTextField(
                                 value = prompt,
@@ -585,16 +584,15 @@ fun MainScreen() {
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.titleMedium
                                         )
-                                        Text(
-                                            text = if (selectedImageBytes != null)
-                                                selectedImage?.lastPathSegment ?: "已选择图片，当前为图生图"
-                                            else
-                                                "不选图片则文生图",
-                                            color = Color(0xFF6B7280),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        if (selectedImageBytes != null) {
+                                            Text(
+                                                text = selectedImage?.lastPathSegment ?: "已选择图片",
+                                                color = Color(0xFF6B7280),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                     Text(
                                         text = "›",
