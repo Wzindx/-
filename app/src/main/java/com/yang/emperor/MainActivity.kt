@@ -1456,8 +1456,8 @@ private fun AppDropdownField(
                 onDismissRequest = { expanded = false },
                 modifier = Modifier
                     .heightIn(max = 280.dp)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .align(Alignment.BottomEnd)
+                    .background(MaterialTheme.colorScheme.surface),
+                offset = DpOffset(x = 0.dp, y = 0.dp)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1479,7 +1479,6 @@ private fun AppDropdownField(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppEditableDropdownField(
     title: String,
@@ -1490,8 +1489,45 @@ private fun AppEditableDropdownField(
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
+    var showCustomDialog by remember { mutableStateOf(false) }
+    var customInput by remember { mutableStateOf("") }
+
+    // 自定义输入弹窗
+    if (showCustomDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomDialog = false },
+            title = { Text("自定义模型") },
+            text = {
+                OutlinedTextField(
+                    value = customInput,
+                    onValueChange = { customInput = it },
+                    placeholder = { Text("输入模型名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (customInput.isNotBlank()) {
+                            onValueChange(customInput)
+                            onSelected(customInput)
+                        }
+                        showCustomDialog = false
+                        customInput = ""
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showCustomDialog = false
+                        customInput = ""
+                    }
+                ) { Text("取消") }
+            }
+        )
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -1502,35 +1538,37 @@ private fun AppEditableDropdownField(
         Box(modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = value,
-                onValueChange = onValueChange,
+                onValueChange = {},
                 placeholder = { Text(placeholder) },
                 singleLine = true,
-                readOnly = false,
+                readOnly = true,
+                enabled = false,
                 trailingIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clickable { expanded = !expanded },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null
-                        )
-                    }
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
                 },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                    disabledBorderColor = MaterialTheme.colorScheme.outline,
+                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+            // 透明点击层
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                shape = RoundedCornerShape(18.dp)
+                    .matchParentSize()
+                    .clickable { expanded = !expanded }
             )
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
                 modifier = Modifier
-                    .heightIn(max = 280.dp)
+                    .heightIn(max = 320.dp)
                     .background(MaterialTheme.colorScheme.surface)
-                    .align(Alignment.BottomEnd)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1544,10 +1582,35 @@ private fun AppEditableDropdownField(
                         onClick = {
                             onSelected(option)
                             expanded = false
-                            focusManager.clearFocus()
                         }
                     )
                 }
+                // 分隔线
+                HorizontalDivider()
+                // 自定义输入选项
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "自定义输入...",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        showCustomDialog = true
+                    }
+                )
             }
         }
     }
