@@ -774,6 +774,14 @@ fun MainScreen() {
                         }
                     }
                 }
+                item {
+                    HistoryStatsCard(
+                        successCount = history.size,
+                        failedCount = 0,
+                        runningCount = if (isLoading) 1 else 0
+                    )
+                }
+
                 if (history.isEmpty()) {
                     item {
                         ElevatedCard(
@@ -794,6 +802,116 @@ fun MainScreen() {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AppBottomSheetPanel(
+    title: String,
+    description: String,
+    onDismiss: () -> Unit,
+    content: @Composable Column.() -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.28f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = false) {},
+            color = Color(0xFFF4F6FF),
+            shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(width = 64.dp, height = 7.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Color(0xFF9CA3AF).copy(alpha = 0.7f))
+                )
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    text = title,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF111827)
+                )
+                Text(
+                    text = description,
+                    color = Color(0xFF6B7280),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryStatsCard(
+    successCount: Int,
+    failedCount: Int,
+    runningCount: Int
+) {
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF5F6FF)),
+        shape = RoundedCornerShape(28.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 18.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HistoryStatItem(successCount, "处理成功", Color(0xFF16A34A))
+            Box(
+                modifier = Modifier
+                    .height(42.dp)
+                    .border(0.5.dp, Color(0xFFD1D5DB))
+            )
+            HistoryStatItem(failedCount, "处理失败", Color(0xFFDC2626))
+            Box(
+                modifier = Modifier
+                    .height(42.dp)
+                    .border(0.5.dp, Color(0xFFD1D5DB))
+            )
+            HistoryStatItem(runningCount, "处理中", Color(0xFFD97706))
+        }
+    }
+}
+
+@Composable
+private fun HistoryStatItem(
+    count: Int,
+    label: String,
+    color: Color
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = count.toString(),
+            color = color,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
+            color = Color(0xFF4B5563),
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -1179,32 +1297,82 @@ private fun StatusCard(status: String) {
 
 @Composable
 private fun HistoryCard(item: HistoryItem) {
-    Column(
-        modifier = Modifier.padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF5F6FF)),
+        shape = RoundedCornerShape(28.dp)
     ) {
-        Text(
-            text = "${item.time} · ${item.mode}",
-            style = MaterialTheme.typography.labelMedium,
-            color = accent
-        )
-        Text(
-            text = item.model,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = item.prompt,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = item.path,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.Gray
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = item.model,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF111827),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    StatusPill(
+                        text = "处理成功",
+                        bg = Color(0xFFDFFBEA),
+                        fg = Color(0xFF15803D)
+                    )
+                }
+                Text(
+                    text = "图片信息：1024x1024",
+                    color = Color(0xFF4B5563),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "${item.time} · ${if (item.mode == "edit") "图生图" else "文生图"}",
+                    color = Color(0xFF4B5563),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            TextButton(
+                onClick = {},
+                modifier = Modifier
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color(0xFFEDE9FE))
+                    .padding(horizontal = 8.dp)
+            ) {
+                Text(
+                    text = "查看",
+                    color = Color(0xFF4C1D95),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun StatusPill(
+    text: String,
+    bg: Color,
+    fg: Color
+) {
+    Text(
+        text = text,
+        color = fg,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(bg)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    )
 }
 
 fun decodePreviewBitmap(bytes: ByteArray, maxSide: Int = 1600) =
