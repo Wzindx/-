@@ -160,7 +160,8 @@ jobs:
             ### 接口兼容与图生图适配
             - 新增 **Generations 图生图兼容** 模式，用于兼容部分中转站将图生图实现到 `/v1/images/generations` 的非标准场景。
             - 图生图现在支持三种路径：`/v1/images/edits`、`/v1/responses`、`/v1/images/generations` 兼容模式。
-            - 兼容模式会将参考图以 data URL 形式传入 `prompt`、`image`、`image_url`、`reference_image` 等字段，提高对不同中转实现的适配能力。
+            - 修复 Generations 图生图兼容模式在大图参考图下可能因 Base64 JSON 过大导致 OOM 闪退的问题。
+            - 兼容模式现在会压缩参考图并限制请求体体积，过大图片会给出错误提示，避免直接崩溃。
             - 保留 `Images API` 与 `Responses API` 双模式配置，继续适配不同 OpenAI 兼容服务。
 
             ### 尺寸、比例与模型列表
