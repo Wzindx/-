@@ -1208,12 +1208,8 @@ fun callEdit(
 
     conn.outputStream.use { out ->
         fun field(name: String, value: String) {
-            out.write("--$boundary\r
-".toByteArray())
-            out.write("Content-Disposition: form-data; name=\"$name\"\r
-\r
-$value\r
-".toByteArray())
+            out.write("--$boundary\\r\\n".toByteArray())
+            out.write("Content-Disposition: form-data; name=\"$name\"\\r\\n\\r\\n$value\\r\\n".toByteArray())
         }
 
         field("model", model.trim())
@@ -1223,17 +1219,11 @@ $value\r
         field("output_format", outputFormat)
         if (background.isNotBlank()) field("background", background)
 
-        out.write("--$boundary\r
-".toByteArray())
-        out.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r
-".toByteArray())
-        out.write("Content-Type: image/png\r
-\r
-".toByteArray())
+        out.write("--$boundary\\r\\n".toByteArray())
+        out.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\\r\\n".toByteArray())
+        out.write("Content-Type: image/png\\r\\n\\r\\n".toByteArray())
         out.write(sourceImageBytes)
-        out.write("\r
---$boundary--\r
-".toByteArray())
+        out.write("\\r\\n--$boundary--\\r\\n".toByteArray())
     }
     return parseImageResponse(conn)
 }
@@ -1339,8 +1329,7 @@ fun callEditResponses(
     val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(sourceImageBytes, Base64.NO_WRAP)
 
     val inputContent = JSONArray().apply {
-        put(JSONObject().put("type", "input_text").put("text", "Use the following text as the complete prompt. Do not rewrite it:
-$prompt"))
+        put(JSONObject().put("type", "input_text").put("text", "Use the following text as the complete prompt. Do not rewrite it:\\n$prompt"))
         put(JSONObject().put("type", "input_image").put("image_url", inputImageDataUrl))
     }
 
