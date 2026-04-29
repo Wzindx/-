@@ -789,12 +789,12 @@ fun MainScreen() {
                                             background = background
                                         )
                                         taskQueue.add(task)
-                                        status = "任务已加入后台队列，可继续提交新的生成任务。"
+                                        status = if (selectedImageBytes != null) "已开始后台编辑，可继续创建新任务。" else "已开始后台生成，可继续创建新任务。"
                                         currentRoute = ScreenRoute.HISTORY
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(if (selectedImageBytes != null) "加入后台编辑队列" else "加入后台生成队列")
+                                    Text(if (selectedImageBytes != null) "编辑图像" else "生成图像")
                                 }
                             }
 
