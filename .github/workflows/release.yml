@@ -92,8 +92,21 @@ jobs:
       - name: Build Release APK for manual dispatch
         if: github.event_name == 'workflow_dispatch'
         shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            mkdir -p "$RUNNER_TEMP/android-signing"
+            KEYSTORE_PATH="$RUNNER_TEMP/android-signing/release.jks"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+            chmod 600 "$KEYSTORE_PATH"
+            export ANDROID_KEYSTORE_PATH="$KEYSTORE_PATH"
+          fi
+
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
             GRADLE_CMD=./gradlew
