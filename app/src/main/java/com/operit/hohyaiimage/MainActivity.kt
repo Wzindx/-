@@ -520,63 +520,27 @@ fun MainScreen() {
                             .padding(horizontal = 4.dp, vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        StatusCard(status)
+                        Spacer(Modifier.height(12.dp))
                         Text(
                             text = "通用图像工坊",
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "输入提示词，选图后会自动切换为图生图。",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.76f),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
                     }
                 }
 
                 item {
                     ElevatedCard(
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                        colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF5F6FF)),
                         shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            SectionTitle("创作", "输入提示词，选图后会自动切换为图生图。")
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-                                shape = RoundedCornerShape(18.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = if (selectedImageBytes != null) "当前为图生图 / 编辑" else "当前为文生图",
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            text = if (selectedImageBytes != null)
-                                                selectedImage?.lastPathSegment ?: "已选择参考图"
-                                            else
-                                                "未选择参考图，输入描述即可生成",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF6B7280),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    TextButton(onClick = { showReferenceSheet = true }) {
-                                        Text(if (selectedImageBytes == null) "选择图片" else "更换图片")
-                                    }
-                                }
-                            }
+                            SectionTitle("创作", "输入描述，选择图片后自动切换为图生图。")
 
                             OutlinedTextField(
                                 value = prompt,
@@ -597,6 +561,106 @@ fun MainScreen() {
                             )
 
                             ConfigEntryCard(
+                                title = "选择图片",
+                                primary = if (selectedImageBytes != null) "当前为图生图 / 编辑" else "当前为文生图",
+                                secondary = if (selectedImageBytes != null)
+                                    selectedImage?.lastPathSegment ?: "已选择图片"
+                                else
+                                    "点按直接选择图片；不选图片则文生图",
+                                onClick = { picker.launch("image/*") }
+                            )
+
+                            if (isLoading) {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            }
+
+                            Surface(
+                                color = accent,
+                                shape = RoundedCornerShape(22.dp),
+                                tonalElevation = 4.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Button(
+                                    enabled = !isLoading,
+                                    onClick = {
+                                        scope.launch {
+                                            isLoading = true
+                                            status = "请求已发送，图像生成通常需要 30~180 秒。"
+                                            try {
+                                                val result = withContext(Dispatchers.IO) {
+                                                    if (selectedImageBytes != null) {
+                                                        when (apiMode) {
+                                                            ApiMode.IMAGES -> callEdit(
+                                                                baseUrl = baseUrl,
+                                                                apiKey = apiKey,
+                                                                model = editModel,
+                                                                prompt = prompt,
+                                                                imageBytes = selectedImageBytes,
+                                                                size = size,
+                                                                quality = quality,
+                                                                outputFormat = outputFormat,
+                                                                background = background
+                                                            )
+
+                                                            ApiMode.RESPONSES -> callEditResponses(
+                                                                baseUrl = baseUrl,
+                                                                apiKey = apiKey,
+                                                                model = editModel,
+                                                                prompt = prompt,
+                                                                imageBytes = selectedImageBytes,
+                                                                size = size,
+                                                                quality = quality,
+                                                                outputFormat = outputFormat,
+                                                                background = background
+                                                            )
+
+                                                            ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
+                                                                model = editModel,
+                                                                prompt = prompt,
+                                                                imageBytes = selectedImageBytes,
+                                                                baseUrl = baseUrl,
+                                                                apiKey = apiKey,
+                                                                size = size,
+                                                                quality = quality
+                                                            )
+                                                        }
+                                                    } else {
+                                                        callGenerate(
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
+                                                            model = generateModel,
+                                                            prompt = prompt,
+                                                            n = count.toIntOrNull() ?: 1,
+                                                            size = size,
+                                                            quality = quality
+                                                        )
+                                                    }
+                                                }
+                                                imageBytes = result
+                                                val item = HistoryItem(
+                                                    time = now(),
+                                                    mode = if (selectedImageBytes != null) "edit" else "generate",
+                                                    model = if (selectedImageBytes != null) editModel else generateModel,
+                                                    prompt = prompt,
+                                                    path = "未下载"
+                                                )
+                                                history = listOf(item) + history.take(29)
+                                                saveHistory(prefs, history)
+                                                status = "生成完成，可在结果预览中查看或下载到相册。"
+                                            } catch (e: Exception) {
+                                                status = "生成失败：${e.message}"
+                                            } finally {
+                                                isLoading = false
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(if (isLoading) "正在生成..." else if (selectedImageBytes != null) "开始编辑图像" else "开始生成图像")
+                                }
+                            }
+
+                            ConfigEntryCard(
                                 title = "接口与模型",
                                 primary = apiMode.label,
                                 secondary = "模型：${if (selectedImageBytes != null) editModel else generateModel}",
@@ -609,92 +673,6 @@ fun MainScreen() {
                                 secondary = "画质 $quality · $outputFormat · 数量 $count",
                                 onClick = { showParamsSheet = true }
                             )
-
-                            if (isLoading) {
-                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            }
-
-                            Button(
-                                enabled = !isLoading,
-                                onClick = {
-                                    scope.launch {
-                                        isLoading = true
-                                        status = "请求已发送，图像生成通常需要 30~180 秒。"
-                                        try {
-                                            val result = withContext(Dispatchers.IO) {
-                                                if (selectedImageBytes != null) {
-                                                    when (apiMode) {
-                                                        ApiMode.IMAGES -> callEdit(
-                                                            baseUrl = baseUrl,
-                                                            apiKey = apiKey,
-                                                            model = editModel,
-                                                            prompt = prompt,
-                                                            imageBytes = selectedImageBytes,
-                                                            size = size,
-                                                            quality = quality,
-                                                            outputFormat = outputFormat,
-                                                            background = background
-                                                        )
-
-                                                        ApiMode.RESPONSES -> callEditResponses(
-                                                            baseUrl = baseUrl,
-                                                            apiKey = apiKey,
-                                                            model = editModel,
-                                                            prompt = prompt,
-                                                            imageBytes = selectedImageBytes,
-                                                            size = size,
-                                                            quality = quality,
-                                                            outputFormat = outputFormat,
-                                                            background = background
-                                                        )
-
-                                                        ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
-                                                            model = editModel,
-                                                            prompt = prompt,
-                                                            imageBytes = selectedImageBytes,
-                                                            baseUrl = baseUrl,
-                                                            apiKey = apiKey,
-                                                            size = size,
-                                                            quality = quality
-                                                        )
-                                                    }
-                                                } else {
-                                                    callGenerate(
-                                                        baseUrl = baseUrl,
-                                                        apiKey = apiKey,
-                                                        model = generateModel,
-                                                        prompt = prompt,
-                                                        n = count.toIntOrNull() ?: 1,
-                                                        size = size,
-                                                        quality = quality
-                                                    )
-                                                }
-                                            }
-                                            imageBytes = result
-                                            val saved = saveToGallery(context, result, outputFormat)
-                                            val item = HistoryItem(
-                                                time = now(),
-                                                mode = if (selectedImageBytes != null) "edit" else "generate",
-                                                model = if (selectedImageBytes != null) editModel else generateModel,
-                                                prompt = prompt,
-                                                path = saved
-                                            )
-                                            history = listOf(item) + history.take(29)
-                                            saveHistory(prefs, history)
-                                            status = "生成完成，已保存到相册：$saved"
-                                        } catch (e: Exception) {
-                                            status = "生成失败：${e.message}"
-                                        } finally {
-                                            isLoading = false
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(if (isLoading) "正在生成..." else if (selectedImageBytes != null) "开始编辑图像" else "开始生成图像")
-                            }
-
-                            StatusCard(status)
                         }
                     }
                 }
@@ -713,7 +691,7 @@ fun MainScreen() {
                                     modifier = Modifier.padding(18.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    SectionTitle("结果预览", "生成完成后自动显示并写入系统相册")
+                                    SectionTitle("结果预览", "生成完成后可查看或手动下载到相册")
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -729,6 +707,28 @@ fun MainScreen() {
                                                 .fillMaxWidth()
                                                 .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
                                         )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        TextButton(
+                                            onClick = {
+                                                status = "结果已显示在预览区。"
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("查看")
+                                        }
+                                        Button(
+                                            onClick = {
+                                                val saved = saveToGallery(context, bytes, outputFormat)
+                                                status = "已下载到相册：$saved"
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("下载")
+                                        }
                                     }
                                 }
                             }
