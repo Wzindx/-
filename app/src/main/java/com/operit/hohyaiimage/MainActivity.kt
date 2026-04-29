@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -113,7 +114,8 @@ private enum class ScreenRoute {
 
 private enum class ApiMode(val value: String, val label: String) {
     IMAGES("images", "Images API"),
-    RESPONSES("responses", "Responses API");
+    RESPONSES("responses", "Responses API"),
+    GENERATIONS_EDIT("generations_edit", "Generations 图生图兼容");
 
     companion object {
         fun from(value: String?): ApiMode =
@@ -142,29 +144,33 @@ private val imageModels = listOf(
     "gpt-image-1-mini",
     "gpt-image-1-high",
     "gpt-image-1-hd",
-    "dall-e-3",
-    "dall-e-2",
     "prime/gpt-image-2",
     "mix/gpt-image-2"
 )
 
 private val generationSizes = listOf(
-    SizeOption("1024x1024", "1K 方图", "标准正方形，通用首选"),
-    SizeOption("1536x1024", "1.5K 横图", "适合封面、壁纸横构图"),
-    SizeOption("1024x1536", "1.5K 竖图", "适合头像、海报竖构图"),
-    SizeOption("2048x2048", "2K 方图", "更高细节，更耗时"),
-    SizeOption("2048x1152", "2K 横图", "16:9 近似比例，适合横屏"),
-    SizeOption("1152x2048", "2K 竖图", "适合竖屏海报"),
-    SizeOption("4096x4096", "4K 方图", "超高分辨率，适合精修"),
-    SizeOption("4096x2304", "4K 横图", "适合桌面壁纸"),
-    SizeOption("2304x4096", "4K 竖图", "适合手机壁纸")
+    SizeOption("1024x1024", "1:1 方图", "标准正方形，通用首选"),
+    SizeOption("1536x1024", "3:2 横图", "适合封面、壁纸横构图"),
+    SizeOption("1024x1536", "2:3 竖图", "适合头像、海报竖构图"),
+    SizeOption("2048x1536", "4:3 横图", "经典横向比例，适合相机/封面构图"),
+    SizeOption("1536x2048", "3:4 竖图", "经典竖向比例，适合人物、头像和手机阅读场景"),
+    SizeOption("2048x1152", "16:9 横图", "适合横屏、桌面壁纸、视频封面"),
+    SizeOption("1152x2048", "9:16 竖图", "适合手机壁纸、竖屏海报"),
+    SizeOption("2048x2048", "1:1 高清方图", "更高细节，更耗时"),
+    SizeOption("4096x4096", "1:1 4K 方图", "超高分辨率，适合精修"),
+    SizeOption("4096x2304", "16:9 4K 横图", "适合桌面壁纸"),
+    SizeOption("2304x4096", "9:16 4K 竖图", "适合手机壁纸")
 )
 
 private val editSizes = listOf(
-    SizeOption("1024x1024", "1K 方图", "编辑稳定、兼容性最好"),
-    SizeOption("1536x1024", "1.5K 横图", "横向延展"),
-    SizeOption("1024x1536", "1.5K 竖图", "纵向延展"),
-    SizeOption("2048x2048", "2K 方图", "高细节编辑")
+    SizeOption("1024x1024", "1:1 方图", "编辑稳定、兼容性最好"),
+    SizeOption("1536x1024", "3:2 横图", "横向延展"),
+    SizeOption("1024x1536", "2:3 竖图", "纵向延展"),
+    SizeOption("2048x1536", "4:3 横图", "经典横向编辑比例"),
+    SizeOption("1536x2048", "3:4 竖图", "经典竖向编辑比例"),
+    SizeOption("2048x1152", "16:9 横图", "横屏编辑比例"),
+    SizeOption("1152x2048", "9:16 竖图", "竖屏编辑比例"),
+    SizeOption("2048x2048", "1:1 高清方图", "高细节编辑")
 )
 
 private val qualityOptions = listOf("auto", "low", "medium", "high")
@@ -175,6 +181,8 @@ private val ratioGuide = listOf(
     "1:1 → 1024x1024 / 2048x2048 / 4096x4096",
     "3:2 → 1536x1024",
     "2:3 → 1024x1536",
+    "4:3 → 2048x1536",
+    "3:4 → 1536x2048",
     "16:9 → 2048x1152 / 4096x2304",
     "9:16 → 1152x2048 / 2304x4096"
 )
@@ -197,6 +205,10 @@ fun MainScreen() {
     val prefs = remember { context.getSharedPreferences("config", Context.MODE_PRIVATE) }
 
     var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
+
+    BackHandler(enabled = currentRoute == ScreenRoute.SETTINGS) {
+        currentRoute = ScreenRoute.MAIN
+    }
 
     var baseUrl by rememberSaveable { mutableStateOf(prefs.getString("baseUrl", "https://api.openai.com/v1") ?: "") }
     var apiKey by rememberSaveable { mutableStateOf(prefs.getString("apiKey", "") ?: "") }
