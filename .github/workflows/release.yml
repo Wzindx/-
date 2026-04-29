@@ -1,8 +1,6 @@
 name: Release Android APK
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 on:
   workflow_run:
     workflows: ["Build Android APK"]
@@ -18,11 +16,9 @@ on:
         description: "Optional version name override, e.g. 1.5"
         required: false
         type: string
-
 permissions:
   contents: write
   actions: read
-
 jobs:
   release:
     if: >
@@ -30,11 +26,9 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Download Release APK artifact from triggering workflow
         if: github.event_name == 'workflow_run'
         uses: dawidd6/action-download-artifact@v6
@@ -43,7 +37,6 @@ jobs:
           name: universal-image-studio-release-apk
           path: dist-release
           if_no_artifact_found: fail
-
       - name: Collect release APK
         if: github.event_name == 'workflow_run'
         shell: bash
@@ -58,7 +51,6 @@ jobs:
           fi
           cp "$RELEASE_APK" dist/app-release.apk
           echo "APK_CHANNEL=release APK" >> "$GITHUB_ENV"
-
       - name: Resolve release variables
         shell: bash
         run: |
@@ -68,23 +60,19 @@ jobs:
             echo "Failed to read versionName from app/build.gradle.kts"
             exit 1
           fi
-
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag_name }}" ]; then
             TAG_NAME="${{ inputs.tag_name }}"
           else
             TAG_NAME="v$GRADLE_VERSION_NAME"
           fi
-
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version_name }}" ]; then
             VERSION_NAME="${{ inputs.version_name }}"
           else
             VERSION_NAME="${TAG_NAME#v}"
           fi
-
           echo "GRADLE_VERSION_NAME=$GRADLE_VERSION_NAME" >> "$GITHUB_ENV"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
-
       - name: Set up Java
         if: github.event_name == 'workflow_dispatch'
         uses: actions/setup-java@v4
@@ -95,7 +83,6 @@ jobs:
       - name: Set up Android SDK
         if: github.event_name == 'workflow_dispatch'
         uses: android-actions/setup-android@v3
-
       - name: Set up Gradle
         if: github.event_name == 'workflow_dispatch'
         uses: gradle/actions/setup-gradle@v4
@@ -118,9 +105,7 @@ jobs:
           else
             GRADLE_CMD=gradle
           fi
-
           "$GRADLE_CMD" :app:assembleRelease --no-daemon --stacktrace
-
           mkdir -p dist
           RELEASE_APK="$(find app/build/outputs/apk/release -name '*release*.apk' -print -quit 2>/dev/null || true)"
           if [ -z "$RELEASE_APK" ]; then
@@ -130,14 +115,12 @@ jobs:
           fi
           cp "$RELEASE_APK" dist/app-release.apk
           echo "APK_CHANNEL=release APK" >> "$GITHUB_ENV"
-
       - name: Verify release APK exists
         shell: bash
         run: |
           set -euo pipefail
           ls -lah dist
           test -f dist/app-release.apk
-
       - name: Delete stale debug APK asset from this release
         shell: bash
         env:
@@ -146,7 +129,6 @@ jobs:
           set +e
           gh release delete-asset "$TAG_NAME" app-debug.apk -y
           exit 0
-
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -154,28 +136,25 @@ jobs:
           name: UniversalImageStudio ${{ env.TAG_NAME }}
           body: |
             ## ${{ env.TAG_NAME }} 更新内容
+            ### 密钥安全增强
+            - API Key / Base URL / 模型配置改为使用 **Android Keystore + EncryptedSharedPreferences** 加密保存
+            - 从 v1.6 升级到 v1.7 时，会自动迁移旧版 SharedPreferences 明文配置
+            - 迁移完成后会清理旧 `config.xml` 中的 `apiKey`、`baseUrl`、模型配置和历史记录字段
+            - 新增“清除密钥、配置和历史记录”入口，方便用户一键清理敏感信息
+            - 说明：root 环境无法做到绝对防护，但 v1.7 起配置文件不再直接暴露明文 API Key
 
             ### 图生图接口兼容与稳定性
-            - 新增 **Generations 图生图兼容** 模式，用于兼容部分将图生图实现到 `/v1/images/generations` 的非标准服务
-            - 图生图现支持 `/v1/images/edits`、`/v1/responses`、`/v1/images/generations` 三种路径
-            - 修复 Generations 图生图兼容模式在大图参考图下可能导致 OOM 闪退的问题
-            - 兼容模式改为先压缩参考图并限制请求体大小，过大图片会直接提示错误，避免应用崩溃
-            - 选中参考图时会立即缓存图像字节，修复部分设备或流程下点击生成时“无法读取参考图”的问题，并同步提升 `Responses` / `Generations` 路径稳定性
-
-            ### 参数选择与首页交互
-            - 首页尺寸选择调整为 **尺寸 / 比例** 单一选择项，避免把固定分辨率误解为可与画质任意组合
-            - 画质选项保留在高级参数中
-            - 补全常用尺寸 / 比例预设：`1:1`、`3:2`、`2:3`、`4:3`、`3:4`、`16:9`、`9:16`
-            - 推荐模型列表移除 DALL·E 系列，减少不适合当前兼容目标的推荐项
-
-            ### 体验与界面
-            - 修复设置页系统返回键直接退出 App 的问题，现在会先返回首页
-            - 扩大 Monet / Material You 动态色覆盖范围，让首页、设置页、卡片、顶栏和系统栏颜色更协调
-
-            ### 构建与发布
-            - Android 构建与 Release workflow 已加入 Node 24 兼容处理
-            - 发布页继续只保留正式签名的 `app-release.apk`
-
+            - 保留 **Generations 图生图兼容** 模式
+            - 继续支持 `/v1/images/edits`、`/v1/responses`、`/v1/images/generations` 三种路径
+            - 保留参考图选中即缓存机制，降低点击生成时 URI 失效导致读取失败的概率
+            - 保留大图压缩与请求体大小限制，避免兼容模式下 OOM 闪退
+            ### 体验优化
+            - 设置页新增安全存储说明
+            - 首页继续保持轻量化创作流程
+            - 历史记录随安全配置一起迁移到加密配置中
+            ### 发布建议
+            - 建议所有 v1.6 用户升级到 v1.7
+            - 旧版 Release 将不再保留，避免继续下载未加密存储版本
           files: dist/app-release.apk
           draft: false
           prerelease: false
