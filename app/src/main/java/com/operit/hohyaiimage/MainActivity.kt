@@ -226,6 +226,7 @@ fun MainScreen() {
     var background by rememberSaveable { mutableStateOf("auto") }
     var editMode by rememberSaveable { mutableStateOf(false) }
     var selectedImage by remember { mutableStateOf(null as Uri?) }
+    var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
     var isLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("欢迎使用，请先在设置页填写接口信息。") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
@@ -244,7 +245,15 @@ fun MainScreen() {
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedImage = uri
-        if (uri != null) editMode = true
+        selectedImageBytes = runCatching {
+            uri?.let { readAllBytes(context, it) }
+        }.getOrNull()
+        if (uri != null) {
+            editMode = true
+            if (selectedImageBytes == null) {
+                status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"
+            }
+        }
     }
 
     when (currentRoute) {
@@ -412,6 +421,13 @@ fun MainScreen() {
                                             text = selectedImage?.lastPathSegment ?: "当前未选择图片",
                                             style = MaterialTheme.typography.bodySmall
                                         )
+                                        if (selectedImage != null) {
+                                            Text(
+                                                text = if (selectedImageBytes != null) "参考图已缓存，可直接用于编辑" else "参考图 URI 已记录，但缓存读取失败",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (selectedImageBytes != null) successText else errorText
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -488,12 +504,11 @@ fun MainScreen() {
                                                 if (editMode) {
                                                     when (apiMode) {
                                                         ApiMode.IMAGES -> callEdit(
-                                                            context = context,
                                                             baseUrl = baseUrl,
                                                             apiKey = apiKey,
                                                             model = editModel,
                                                             prompt = prompt,
-                                                            imageUri = selectedImage,
+                                                            imageBytes = selectedImageBytes,
                                                             size = size,
                                                             quality = quality,
                                                             outputFormat = outputFormat,
@@ -501,12 +516,11 @@ fun MainScreen() {
                                                         )
 
                                                         ApiMode.RESPONSES -> callEditResponses(
-                                                            context = context,
                                                             baseUrl = baseUrl,
                                                             apiKey = apiKey,
                                                             model = editModel,
                                                             prompt = prompt,
-                                                            imageUri = selectedImage,
+                                                            imageBytes = selectedImageBytes,
                                                             size = size,
                                                             quality = quality,
                                                             outputFormat = outputFormat,
@@ -514,12 +528,11 @@ fun MainScreen() {
                                                         )
 
                                                         ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
-                                                            context = context,
-                                                            baseUrl = baseUrl,
-                                                            apiKey = apiKey,
                                                             model = editModel,
                                                             prompt = prompt,
-                                                            imageUri = selectedImage,
+                                                            imageBytes = selectedImageBytes,
+                                                            baseUrl = baseUrl,
+                                                            apiKey = apiKey,
                                                             size = size,
                                                             quality = quality
                                                         )
@@ -944,6 +957,10 @@ fun endpoint(baseUrl: String, path: String): String {
     return if (b.endsWith("/v1")) "$b$path" else "$b/v1$path"
 }
 
+fun readAllBytes(context: Context, imageUri: Uri): ByteArray =
+    context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+        ?: error("无法读取参考图")
+
 fun callGenerate(
     baseUrl: String,
     apiKey: String,
@@ -975,12 +992,11 @@ fun callGenerate(
 }
 
 fun callEdit(
-    context: Context,
     baseUrl: String,
     apiKey: String,
     model: String,
     prompt: String,
-    imageUri: Uri?,
+    imageBytes: ByteArray?,
     size: String,
     quality: String,
     outputFormat: String,
@@ -988,7 +1004,7 @@ fun callEdit(
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(prompt.isNotBlank()) { "请填写编辑指令" }
-    val sourceImageUri = requireNotNull(imageUri) { "请先选择参考图" }
+    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }
 
     val boundary = "----AndroidBoundary${UUID.randomUUID()}"
     val conn = URL(endpoint(baseUrl, "/images/edits")).openConnection() as HttpURLConnection
@@ -1015,27 +1031,26 @@ fun callEdit(
         out.write("--$boundary\r\n".toByteArray())
         out.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r\n".toByteArray())
         out.write("Content-Type: image/png\r\n\r\n".toByteArray())
-        context.contentResolver.openInputStream(sourceImageUri)?.use { it.copyTo(out) }
+        out.write(sourceImageBytes)
         out.write("\r\n--$boundary--\r\n".toByteArray())
     }
     return parseImageResponse(conn)
 }
 
 fun callEditGenerationsCompat(
-    context: Context,
     baseUrl: String,
     apiKey: String,
     model: String,
     prompt: String,
-    imageUri: Uri?,
+    imageBytes: ByteArray?,
     size: String,
     quality: String
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(prompt.isNotBlank()) { "请填写编辑指令" }
-    val sourceImageUri = requireNotNull(imageUri) { "请先选择参考图" }
+    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }
 
-    val inputImageDataUrl = buildCompactImageDataUrl(context, sourceImageUri)
+    val inputImageDataUrl = buildCompactImageDataUrl(sourceImageBytes)
 
     val compatPrompt = """
         $prompt
@@ -1065,8 +1080,7 @@ fun callEditGenerationsCompat(
 }
 
 fun buildCompactImageDataUrl(
-    context: Context,
-    imageUri: Uri,
+    originalBytes: ByteArray,
     maxSide: Int = 1536,
     jpegQuality: Int = 86,
     maxEncodedBytes: Int = 6 * 1024 * 1024
@@ -1074,10 +1088,7 @@ fun buildCompactImageDataUrl(
     val bounds = BitmapFactory.Options().apply {
         inJustDecodeBounds = true
     }
-
-    context.contentResolver.openInputStream(imageUri)?.use { input ->
-        BitmapFactory.decodeStream(input, null, bounds)
-    } ?: error("无法读取参考图")
+    BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size, bounds)
 
     require(bounds.outWidth > 0 && bounds.outHeight > 0) { "参考图格式无法识别" }
 
@@ -1091,9 +1102,8 @@ fun buildCompactImageDataUrl(
         inPreferredConfig = Bitmap.Config.RGB_565
     }
 
-    val bitmap = context.contentResolver.openInputStream(imageUri)?.use { input ->
-        BitmapFactory.decodeStream(input, null, options)
-    } ?: error("参考图解码失败")
+    val bitmap = BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size, options)
+        ?: error("参考图解码失败")
 
     val output = ByteArrayOutputStream()
     try {
@@ -1111,12 +1121,11 @@ fun buildCompactImageDataUrl(
 }
 
 fun callEditResponses(
-    context: Context,
     baseUrl: String,
     apiKey: String,
     model: String,
     prompt: String,
-    imageUri: Uri?,
+    imageBytes: ByteArray?,
     size: String,
     quality: String,
     outputFormat: String,
@@ -1124,11 +1133,9 @@ fun callEditResponses(
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(prompt.isNotBlank()) { "请填写编辑指令" }
-    val sourceImageUri = requireNotNull(imageUri) { "请先选择参考图" }
+    val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }
 
-    val imageBytes = context.contentResolver.openInputStream(sourceImageUri)?.use { it.readBytes() }
-        ?: error("无法读取参考图")
-    val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+    val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(sourceImageBytes, Base64.NO_WRAP)
 
     val inputContent = JSONArray().apply {
         put(JSONObject().put("type", "input_text").put("text", "Use the following text as the complete prompt. Do not rewrite it:\n$prompt"))
@@ -1205,12 +1212,6 @@ fun parseResponsesImageResponse(conn: HttpURLConnection, outputFormat: String): 
                 .removePrefix("data:image/webp;base64,")
             return Base64.decode(pureBase64, Base64.DEFAULT)
         }
-    }
-
-    val fallbackMime = when (outputFormat) {
-        "jpeg" -> "image/jpeg"
-        "webp" -> "image/webp"
-        else -> "image/png"
     }
 
     for (index in 0 until output.length()) {
