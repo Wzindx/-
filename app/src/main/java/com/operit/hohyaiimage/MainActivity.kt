@@ -291,10 +291,10 @@ fun MainScreen() {
         )
 
         ScreenRoute.MAIN -> Scaffold(
-            containerColor = pageBg,
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
                 Surface(
-                    color = heroStart,
+                    color = MaterialTheme.colorScheme.primary,
                     shadowElevation = 0.dp
                 ) {
                     Column(
@@ -340,7 +340,7 @@ fun MainScreen() {
             ) {
                 item {
                     ElevatedCard(
-                        colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                         shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
@@ -571,7 +571,7 @@ fun MainScreen() {
                         }
                         if (bitmap != null) {
                             ElevatedCard(
-                                colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                                 shape = RoundedCornerShape(24.dp)
                             ) {
                                 Column(
@@ -603,7 +603,7 @@ fun MainScreen() {
 
                 item {
                     ElevatedCard(
-                        colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                         shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
@@ -665,14 +665,14 @@ private fun SettingsScreen(
     onSave: () -> Unit
 ) {
     Scaffold(
-        containerColor = pageBg,
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
                 title = { Text("接口设置") },
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("返回") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = pageBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         }
     ) { padding ->
@@ -685,7 +685,7 @@ private fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             ElevatedCard(
-                colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
@@ -789,7 +789,7 @@ private fun SectionTitle(title: String, desc: String) {
 @Composable
 private fun InfoCard(title: String, content: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(
@@ -798,7 +798,7 @@ private fun InfoCard(title: String, content: String) {
         ) {
             Text(
                 text = title,
-                color = accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.labelLarge
             )
