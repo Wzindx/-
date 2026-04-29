@@ -135,26 +135,31 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           name: UniversalImageStudio ${{ env.TAG_NAME }}
           body: |
-            ## ${{ env.TAG_NAME }} 更新内容
-            ### 密钥安全增强
-            - API Key / Base URL / 模型配置改为使用 **Android Keystore + EncryptedSharedPreferences** 加密保存
-            - 从 v1.6 升级到 v1.7 时，会自动迁移旧版 SharedPreferences 明文配置
-            - 迁移完成后会清理旧 `config.xml` 中的 `apiKey`、`baseUrl`、模型配置和历史记录字段
-            - 新增“清除密钥、配置和历史记录”入口，方便用户一键清理敏感信息
-            - 说明：root 环境无法做到绝对防护，但 v1.7 起配置文件不再直接暴露明文 API Key
+            ## UniversalImageStudio v1.7
 
-            ### 图生图接口兼容与稳定性
-            - 保留 **Generations 图生图兼容** 模式
-            - 继续支持 `/v1/images/edits`、`/v1/responses`、`/v1/images/generations` 三种路径
-            - 保留参考图选中即缓存机制，降低点击生成时 URI 失效导致读取失败的概率
-            - 保留大图压缩与请求体大小限制，避免兼容模式下 OOM 闪退
-            ### 体验优化
-            - 设置页新增安全存储说明
-            - 首页继续保持轻量化创作流程
-            - 历史记录随安全配置一起迁移到加密配置中
-            ### 发布建议
-            - 建议所有 v1.6 用户升级到 v1.7
-            - 旧版 Release 将不再保留，避免继续下载未加密存储版本
+            这是从 v1.7 开始保留的正式版本，重点优化安全、界面体验与安装包体积。
+
+            ### 本版更新
+            - 接口配置改为 Android Keystore + EncryptedSharedPreferences 加密保存
+            - 从旧版升级时自动迁移原 SharedPreferences 配置，并清理旧明文字段
+            - 清除配置后停留在“接口设置”页，方便立即重新填写接口
+            - 配置相关操作集中在“接口设置”页，删除占空间的安全存储说明卡片
+            - 主页面顶部改为浅色沉浸式风格，减少大面积蓝色色块，与状态栏更协调
+            - Release 构建启用代码压缩与资源裁剪，尽量降低 APK 体积
+
+            ### 兼容与稳定性
+            - 保留 Generations 图生图兼容模式
+            - 继续支持 /v1/images/edits、/v1/responses、/v1/images/generations 三种路径
+            - 保留参考图缓存、大图压缩与请求体大小限制，降低 URI 失效和 OOM 风险
+
+            ### 安全说明
+            - v1.7 起配置文件不再直接明文保存 API Key
+            - root/调试环境无法做到绝对防护，请仍然妥善保管接口密钥
+            - 旧版 Release 和 debug 构建产物不再保留，避免误下载旧包
+
+            ### 安装建议
+            - 建议所有旧版本用户升级到 v1.7
+            - 如果接口异常，请进入“接口设置”页重新保存配置
           files: dist/app-release.apk
           draft: false
           prerelease: false
