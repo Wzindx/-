@@ -69,12 +69,12 @@ jobs:
           echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
           echo "RELEASE_ENABLED=$RELEASE_ENABLED" >> "$GITHUB_ENV"
 
-      - name: Set up JDK 23
+      - name: Set up JDK 17
         if: env.RELEASE_ENABLED == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '23'
+          java-version: '17'
 
       - name: Set up Android SDK
         if: env.RELEASE_ENABLED == 'true'
