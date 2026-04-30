@@ -1242,11 +1242,18 @@ private fun OobeConfigPage(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp)
         )
-        StatusCard(
-            text = "密钥将保存在本机加密配置中。若接口异常，可进入设置页重新保存。",
-            background = Color(0xFFE8EEFF),
-            contentColor = Color(0xFF334155)
-        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFFE8EEFF),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(
+                text = "密钥将保存在本机加密配置中。若接口异常，可进入设置页重新保存。",
+                color = Color(0xFF334155),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
     }
 }
 
@@ -2101,13 +2108,14 @@ fun callEdit(
     conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
 
     conn.outputStream.use { out ->
+        fun writeText(value: String) {
+            out.write(value.toByteArray(Charsets.UTF_8))
+        }
+
         fun field(name: String, value: String) {
-            out.write("--$boundary\\r\
-".toByteArray())
-            out.write("Content-Disposition: form-data; name=\"$name\"\\r\
-\\r\
-$value\\r\
-".toByteArray())
+            writeText("--$boundary\r\n")
+            writeText("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
+            writeText("$value\r\n")
         }
 
         field("model", model.trim())
@@ -2117,17 +2125,11 @@ $value\\r\
         field("output_format", outputFormat)
         if (background.isNotBlank()) field("background", background)
 
-        out.write("--$boundary\\r\
-".toByteArray())
-        out.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\\r\
-".toByteArray())
-        out.write("Content-Type: image/png\\r\
-\\r\
-".toByteArray())
+        writeText("--$boundary\r\n")
+        writeText("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r\n")
+        writeText("Content-Type: image/png\r\n\r\n")
         out.write(sourceImageBytes)
-        out.write("\\r\
---$boundary--\\r\
-".toByteArray())
+        writeText("\r\n--$boundary--\r\n")
     }
     return parseImageResponse(conn)
 }
