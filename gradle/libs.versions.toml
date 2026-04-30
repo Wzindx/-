@@ -1,10 +1,10 @@
 [versions]
 agpVersion = "8.12.1"
 kotlin = "2.3.20"
-coreKtx = "1.17.0"
-lifecycle = "2.9.4"
-activityCompose = "1.11.0"
-composeBom = "2026.04.00"
+coreKtx = "1.18.0"
+lifecycle = "2.10.0"
+activityCompose = "1.13.0"
+composeBom = "2026.04.01"
 securityCrypto = "1.1.0-alpha06"
 
 [libraries]
