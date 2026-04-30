@@ -920,7 +920,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         }
 
         ScreenRoute.HISTORY -> Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = pageBg,
             bottomBar = {
                 BottomNavigationBar(
                     currentRoute = currentRoute,
@@ -931,6 +931,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(pageBg)
                     .padding(padding),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -968,13 +969,21 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     item {
                         ElevatedCard(
                             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                            shape = RoundedCornerShape(24.dp)
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                "暂无历史记录",
-                                modifier = Modifier.padding(18.dp),
-                                color = Color.Gray
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 28.dp, horizontal = 18.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "暂无历史记录",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                     }
                 } else {
