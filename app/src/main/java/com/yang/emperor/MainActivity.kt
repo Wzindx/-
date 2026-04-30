@@ -87,6 +87,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalFocusManager
@@ -1456,8 +1457,8 @@ private fun AppDropdownField(
                 onDismissRequest = { expanded = false },
                 modifier = Modifier
                     .heightIn(max = 280.dp)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .align(Alignment.TopEnd)
+                    .background(MaterialTheme.colorScheme.surface),
+                offset = DpOffset(x = 200.dp, y = 0.dp)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
@@ -1568,8 +1569,8 @@ private fun AppEditableDropdownField(
                 onDismissRequest = { expanded = false },
                 modifier = Modifier
                     .heightIn(max = 320.dp)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .align(Alignment.TopEnd)
+                    .background(MaterialTheme.colorScheme.surface),
+                offset = DpOffset(x = 200.dp, y = 0.dp)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
