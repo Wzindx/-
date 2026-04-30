@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -57,9 +58,11 @@ fun AppTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    MiuixTheme {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

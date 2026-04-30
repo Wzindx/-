@@ -2,6 +2,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -34,8 +35,8 @@ android {
         applicationId = "com.yang.emperor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.8"
+        versionCode = 11
+        versionName = "1.9"
     }
 
     buildTypes {
@@ -62,7 +63,6 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get() }
 }
 
 dependencies {
@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.miuix.ui)
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.security.crypto)
     debugImplementation(libs.androidx.ui.tooling)

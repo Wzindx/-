@@ -85,6 +85,13 @@ app-release.apk
 com.yang.emperor
 ```
 
+## v1.9 更新说明
+
+- 全面升级 Kotlin 2.3.20、AGP 8.13.1、Compose BOM 2026.04.00，并正式接入 `compose-miuix-ui/miuix` 的 `miuix-ui:0.9.0`。
+- AppTheme 已切换为 `MiuixTheme` 包裹的 Compose 主题结构，保留 Material3 组件兼容层，降低一次性迁移风险。
+- UI 调整为 MIUIX 风格：更大的圆角、浅色分组卡片、柔和蓝紫主色和更清晰的层级。
+- 新增参考 HyperCeiler 首次体验思路的 OOBE 引导页，包含欢迎、能力说明、接口配置和开始使用。
+
 ## 参考与说明
 
 本项目的产品思路参考了 [CookSleep/gpt_image_playground](https://github.com/CookSleep/gpt_image_playground) 中关于图像生成工作流、模型参数组织和轻量化 Playground 体验的设计方向。

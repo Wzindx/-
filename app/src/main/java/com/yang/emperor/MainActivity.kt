@@ -1006,6 +1006,10 @@ private fun OnboardingScreen(
     onSkip: () -> Unit,
     onSave: () -> Unit
 ) {
+    var page by rememberSaveable { mutableStateOf(0) }
+    val totalPages = 4
+    val canSave = baseUrl.isNotBlank() && apiKey.isNotBlank()
+
     Scaffold(containerColor = pageBg) { padding ->
         Column(
             modifier = Modifier
@@ -1013,54 +1017,275 @@ private fun OnboardingScreen(
                 .padding(padding)
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "UniversalImageStudio",
+                    color = Color(0xFF111827),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                TextButton(onClick = onSkip) {
+                    Text("跳过", color = Color(0xFF6B7280), fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            LinearProgressIndicator(
+                progress = (page + 1).toFloat() / totalPages.toFloat(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(99.dp)),
+                color = accent,
+                trackColor = Color(0xFFE4E8F5)
+            )
+
             ElevatedCard(
-                colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
-                shape = RoundedCornerShape(32.dp)
+                colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF8FAFF)),
+                shape = RoundedCornerShape(36.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
                 Column(
-                    modifier = Modifier.padding(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
-                    Text("欢迎使用通用图像工坊", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    Text("首次使用需要先填写接口地址和 API Key。以后也可以在设置页重新打开引导。", color = Color(0xFF6B7280))
-                    OutlinedTextField(
-                        value = baseUrl,
-                        onValueChange = onBaseUrlChange,
-                        label = { Text("Base URL") },
-                        placeholder = { Text("例如：https://api.openai.com/v1") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
-                    )
-                    OutlinedTextField(
-                        value = apiKey,
-                        onValueChange = onApiKeyChange,
-                        label = { Text("API Key") },
-                        placeholder = { Text("输入你的密钥") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
-                    )
-                    Button(
-                        onClick = onSave,
-                        enabled = baseUrl.isNotBlank() && apiKey.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("保存并开始使用")
-                    }
-                    TextButton(
-                        onClick = onSkip,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("暂不设置，进入应用")
+                    when (page) {
+                        0 -> OobeIntroPage()
+                        1 -> OobeFeaturePage()
+                        2 -> OobeConfigPage(
+                            baseUrl = baseUrl,
+                            apiKey = apiKey,
+                            onBaseUrlChange = onBaseUrlChange,
+                            onApiKeyChange = onApiKeyChange
+                        )
+                        else -> OobeReadyPage(canSave = canSave)
                     }
                 }
             }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = { if (page > 0) page-- else onSkip() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (page > 0) "上一步" else "稍后设置")
+                }
+                Button(
+                    onClick = {
+                        if (page < totalPages - 1) {
+                            page++
+                        } else if (canSave) {
+                            onSave()
+                        } else {
+                            onSkip()
+                        }
+                    },
+                    modifier = Modifier.weight(1.4f),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = accent)
+                ) {
+                    Text(
+                        text = when {
+                            page < totalPages - 1 -> "继续"
+                            canSave -> "保存并开始"
+                            else -> "进入应用"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun OobeIntroPage() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(92.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xFFE8EEFF)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("AI", color = accent, fontSize = 34.sp, fontWeight = FontWeight.Black)
+        }
+        Spacer(Modifier.height(22.dp))
+        Text(
+            text = "欢迎使用通用图像工坊",
+            color = Color(0xFF111827),
+            fontSize = 30.sp,
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Make Image Creation Simple Again",
+            color = accent,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "参考 HyperCeiler 的 OOBE 思路：启动时先给出清晰说明、能力边界与必要配置，让首次使用更直接。",
+            color = Color(0xFF6B7280),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun OobeFeaturePage() {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = "MIUIX 风格界面",
+            color = Color(0xFF111827),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Black
+        )
+        Text(
+            text = "v1.9 将界面统一为更接近 MIUIX 的大圆角、浅色分组卡片、清晰层级和柔和蓝紫主色。",
+            color = Color(0xFF6B7280)
+        )
+        OobeFeatureItem("文生图 / 图生图", "统一管理生成、编辑、尺寸、质量和输出格式。")
+        OobeFeatureItem("后台生成", "任务提交后切换页面也不会中断，可在历史记录查看状态。")
+        OobeFeatureItem("轻量配置", "Base URL、API Key、模型和接口模式都可以在设置页调整。")
+        OobeFeatureItem("本地历史", "仅保存必要状态和结果信息，便于快速回看。")
+    }
+}
+
+@Composable
+private fun OobeFeatureItem(title: String, description: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFFF0F3FF))
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(accent.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("✓", color = accent, fontWeight = FontWeight.Black)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, color = Color(0xFF111827), fontWeight = FontWeight.Bold)
+            Text(description, color = Color(0xFF6B7280), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun OobeConfigPage(
+    baseUrl: String,
+    apiKey: String,
+    onBaseUrlChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = "配置接口",
+            color = Color(0xFF111827),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Black
+        )
+        Text(
+            text = "填写兼容 OpenAI 图片接口的 Base URL 和 API Key。也可以先跳过，之后在设置页补充。",
+            color = Color(0xFF6B7280)
+        )
+        OutlinedTextField(
+            value = baseUrl,
+            onValueChange = onBaseUrlChange,
+            label = { Text("Base URL") },
+            placeholder = { Text("例如：https://api.openai.com/v1") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        )
+        OutlinedTextField(
+            value = apiKey,
+            onValueChange = onApiKeyChange,
+            label = { Text("API Key") },
+            placeholder = { Text("输入你的密钥") },
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        )
+        StatusCard(
+            text = "密钥将保存在本机加密配置中。若接口异常，可进入设置页重新保存。",
+            background = Color(0xFFE8EEFF),
+            contentColor = Color(0xFF334155)
+        )
+    }
+}
+
+@Composable
+private fun OobeReadyPage(canSave: Boolean) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(82.dp)
+                .clip(CircleShape)
+                .background(if (canSave) successBg else Color(0xFFFFF7ED)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (canSave) "✓" else "!",
+                color = if (canSave) successText else Color(0xFFD97706),
+                fontSize = 38.sp,
+                fontWeight = FontWeight.Black
+            )
+        }
+        Spacer(Modifier.height(22.dp))
+        Text(
+            text = if (canSave) "准备完成" else "可以稍后配置",
+            color = Color(0xFF111827),
+            fontSize = 30.sp,
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = if (canSave) {
+                "点击保存后即可开始创作。"
+            } else {
+                "当前未填写完整接口信息，你仍可进入应用浏览界面，并在设置页重新打开引导。"
+            },
+            color = Color(0xFF6B7280),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
