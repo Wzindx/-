@@ -1,11 +1,18 @@
 package com.yang.emperor
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
@@ -19,6 +26,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -252,6 +262,7 @@ private val successBg = Color(0xFFE9F7EF)
 private val successText = Color(0xFF1E7B4D)
 private val errorBg = Color(0xFFFFECEC)
 private val errorText = Color(0xFFC03B3B)
+private const val IMAGE_NOTIFICATION_CHANNEL_ID = "image_generation_result"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -296,6 +307,19 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     val runningTasks = remember { mutableStateListOf<String>() }
     val isConfigured = baseUrl.isNotBlank() && apiKey.isNotBlank()
     val runningCount = runningTasks.size
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    LaunchedEffect(Unit) {
+        ensureImageNotificationChannel(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     val currentSizes = if (editMode) editSizes else generationSizes
     val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()
@@ -399,13 +423,22 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     }
                 }
                 imageBytes = result
+                val savedUri = runCatching {
+                    saveToGallery(context, result, task.outputFormat)
+                }.getOrElse { "未下载" }
+
                 history = history.map {
                     if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
-                        it.copy(path = "未下载", state = "success", error = "")
+                        it.copy(path = savedUri, state = "success", error = "")
                     } else it
                 }
                 saveHistory(prefs, history)
-                status = "后台任务完成，可在结果预览中查看或下载。"
+                status = if (savedUri.startsWith("content://")) {
+                    "后台任务完成，已保存到相册。"
+                } else {
+                    "后台任务完成，可在结果预览中查看或下载。"
+                }
+                notifyImageReady(context, savedUri)
             } catch (e: Exception) {
                 history = history.map {
                     if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
@@ -988,7 +1021,10 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     }
                 } else {
                     items(history.take(30)) { item ->
-                        HistoryCard(item)
+                        HistoryCard(
+                            item = item,
+                            onShare = { shareImageFromHistory(context, item.path) }
+                        )
                     }
                 }
             }
@@ -1006,6 +1042,9 @@ private fun OnboardingScreen(
     onSkip: () -> Unit,
     onSave: () -> Unit
 ) {
+    BackHandler(enabled = true) {
+        // 引导页不响应系统返回键，避免误触直接回到主页面。
+    }
     var page by rememberSaveable { mutableStateOf(0) }
     val totalPages = 4
     val canSave = baseUrl.isNotBlank() && apiKey.isNotBlank()
@@ -1059,8 +1098,9 @@ private fun OnboardingScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 22.dp, vertical = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         when (page) {
                             0 -> OobeIntroPage()
@@ -1083,10 +1123,11 @@ private fun OnboardingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
-                    onClick = { if (page > 0) page-- else onSkip() },
+                    onClick = { if (page > 0) page-- },
+                    enabled = page > 0,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(if (page > 0) "上一步" else "稍后设置")
+                    Text(if (page > 0) "上一步" else "")
                 }
                 Button(
                     onClick = {
@@ -1136,24 +1177,17 @@ private fun OobeIntroPage() {
         Text(
             text = "欢迎使用通用图像工坊",
             color = Color(0xFF111827),
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Black,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "Make Image Creation Simple Again",
-            color = accent,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(14.dp))
-        Text(
-            text = "参考 HyperCeiler 的 OOBE 思路：启动时先给出清晰说明、能力边界与必要配置，让首次使用更直接。",
+            text = "选择接口，输入提示词，即可开始生成。",
             color = Color(0xFF6B7280),
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            lineHeight = 24.sp
         )
     }
 }
@@ -1162,19 +1196,19 @@ private fun OobeIntroPage() {
 private fun OobeFeaturePage() {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(
-            text = "MIUIX 风格界面",
+            text = "清爽风格界面",
             color = Color(0xFF111827),
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Black
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
         )
         Text(
-            text = "v1.9 将界面统一为更接近 MIUIX 的大圆角、浅色分组卡片、清晰层级和柔和蓝紫主色。",
-            color = Color(0xFF6B7280)
+            text = "大圆角卡片、浅色层级和柔和主色，减少干扰。",
+            color = Color(0xFF6B7280),
+            lineHeight = 22.sp
         )
-        OobeFeatureItem("文生图 / 图生图", "统一管理生成、编辑、尺寸、质量和输出格式。")
-        OobeFeatureItem("后台生成", "任务提交后切换页面也不会中断，可在历史记录查看状态。")
-        OobeFeatureItem("轻量配置", "Base URL、API Key、模型和接口模式都可以在设置页调整。")
-        OobeFeatureItem("本地历史", "仅保存必要状态和结果信息，便于快速回看。")
+        OobeFeatureItem("生成与编辑", "文生图、图生图集中处理。")
+        OobeFeatureItem("后台任务", "生成中也可以切换页面。")
+        OobeFeatureItem("历史记录", "完成后可查看、下载和分享。")
     }
 }
 
@@ -1220,8 +1254,9 @@ private fun OobeConfigPage(
             fontWeight = FontWeight.Black
         )
         Text(
-            text = "填写兼容 OpenAI 图片接口的 Base URL 和 API Key。也可以先跳过，之后在设置页补充。",
-            color = Color(0xFF6B7280)
+            text = "填写 Base URL 和 API Key，之后也可以在设置里修改。",
+            color = Color(0xFF6B7280),
+            lineHeight = 22.sp
         )
         OutlinedTextField(
             value = baseUrl,
@@ -1242,18 +1277,6 @@ private fun OobeConfigPage(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp)
         )
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFFE8EEFF),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Text(
-                text = "密钥将保存在本机加密配置中。若接口异常，可进入设置页重新保存。",
-                color = Color(0xFF334155),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(12.dp)
-            )
-        }
     }
 }
 
@@ -1289,9 +1312,9 @@ private fun OobeReadyPage(canSave: Boolean) {
         Spacer(Modifier.height(12.dp))
         Text(
             text = if (canSave) {
-                "点击保存后即可开始创作。"
+                "保存后即可开始创作。"
             } else {
-                "当前未填写完整接口信息，你仍可进入应用浏览界面，并在设置页重新打开引导。"
+                "也可以先进入应用，稍后在设置页补充。"
             },
             color = Color(0xFF6B7280),
             style = MaterialTheme.typography.bodyMedium,
@@ -1674,61 +1697,59 @@ private fun AppDropdownField(
             fontWeight = FontWeight.SemiBold
         )
         Box(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = selected,
-                onValueChange = {},
-                readOnly = true,
-                enabled = false,
-                trailingIcon = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable { expanded = true },
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 15.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selected,
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null
                     )
-                },
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
                 modifier = Modifier
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                    disabledBorderColor = MaterialTheme.colorScheme.outline,
-                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-            // 透明点击层覆盖在 disabled TextField 上
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clickable { expanded = !expanded }
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(1.dp)
+                    .width(280.dp)
+                    .heightIn(max = 220.dp)
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    offset = DpOffset(x = 0.dp, y = 8.dp),
-                    modifier = Modifier
-                        .width(280.dp)
-                        .heightIn(max = 220.dp)
-                        .background(MaterialTheme.colorScheme.surface)
-                ) {
-                    options.forEach { option ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = option,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            onClick = {
-                                onSelected(option)
-                                expanded = false
-                            }
-                        )
-                    }
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {
+                            onSelected(option)
+                            expanded = false
+                        }
+                    )
                 }
             }
         }
@@ -1748,7 +1769,6 @@ private fun AppEditableDropdownField(
     var showCustomDialog by remember { mutableStateOf(false) }
     var customInput by remember { mutableStateOf("") }
 
-    // 自定义输入弹窗
     if (showCustomDialog) {
         AlertDialog(
             onDismissRequest = { showCustomDialog = false },
@@ -1759,15 +1779,17 @@ private fun AppEditableDropdownField(
                     onValueChange = { customInput = it },
                     placeholder = { Text("输入模型名称") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp)
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (customInput.isNotBlank()) {
-                            onValueChange(customInput)
-                            onSelected(customInput)
+                        val trimmed = customInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            onValueChange(trimmed)
+                            onSelected(trimmed)
                         }
                         showCustomDialog = false
                         customInput = ""
@@ -1792,78 +1814,75 @@ private fun AppEditableDropdownField(
             fontWeight = FontWeight.SemiBold
         )
         Box(modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = {},
-                placeholder = { Text(placeholder) },
-                singleLine = true,
-                readOnly = true,
-                enabled = false,
-                trailingIcon = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable { expanded = true },
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 15.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = value.ifBlank { placeholder },
+                        modifier = Modifier.weight(1f),
+                        color = if (value.isBlank()) Color(0xFF9CA3AF) else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null
                     )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                    disabledBorderColor = MaterialTheme.colorScheme.outline,
-                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-            // 透明点击层
-            Box(
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
                 modifier = Modifier
-                    .matchParentSize()
-                    .clickable { expanded = !expanded }
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(1.dp)
+                    .width(280.dp)
+                    .heightIn(max = 220.dp)
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    offset = DpOffset(x = 0.dp, y = 8.dp),
-                    modifier = Modifier
-                        .width(280.dp)
-                        .heightIn(max = 220.dp)
-                        .background(MaterialTheme.colorScheme.surface)
-                ) {
-                    options.forEach { option ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = option,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            onClick = {
-                                onSelected(option)
-                                expanded = false
-                            }
-                        )
-                    }
+                options.forEach { option ->
                     DropdownMenuItem(
                         text = {
                             Text(
-                                text = "自定义输入",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium,
+                                text = option,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         },
                         onClick = {
+                            onSelected(option)
                             expanded = false
-                            showCustomDialog = true
                         }
                     )
                 }
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "自定义输入",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        showCustomDialog = true
+                    }
+                )
             }
         }
     }
@@ -1899,7 +1918,10 @@ private fun StatusCard(status: String) {
 }
 
 @Composable
-private fun HistoryCard(item: HistoryItem) {
+private fun HistoryCard(
+    item: HistoryItem,
+    onShare: () -> Unit
+) {
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF5F6FF)),
         shape = RoundedCornerShape(28.dp)
@@ -1921,7 +1943,7 @@ private fun HistoryCard(item: HistoryItem) {
                 ) {
                     Text(
                         text = item.model,
-                        fontSize = 22.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF111827),
                         maxLines = 1,
@@ -1941,7 +1963,9 @@ private fun HistoryCard(item: HistoryItem) {
                 Text(
                     text = if (item.error.isNotBlank()) "错误：${item.error}" else "图片信息：${item.path}",
                     color = Color(0xFF4B5563),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "${item.time} · ${if (item.mode == "edit") "图生图" else "文生图"}",
@@ -1949,18 +1973,21 @@ private fun HistoryCard(item: HistoryItem) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            TextButton(
-                onClick = {},
-                modifier = Modifier
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color(0xFFEDE9FE))
-                    .padding(horizontal = 8.dp)
-            ) {
-                Text(
-                    text = "查看",
-                    color = Color(0xFF4C1D95),
-                    fontWeight = FontWeight.SemiBold
-                )
+
+            if (item.state == "success" && item.path.startsWith("content://")) {
+                TextButton(
+                    onClick = onShare,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Color(0xFFEDE9FE))
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Text(
+                        text = "分享",
+                        color = Color(0xFF4C1D95),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
     }
@@ -2344,6 +2371,71 @@ fun download(url: String): ByteArray {
     conn.connectTimeout = 30000
     conn.readTimeout = 180000
     return conn.inputStream.use { it.readBytes() }
+}
+
+fun ensureImageNotificationChannel(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+    val channel = NotificationChannel(
+        IMAGE_NOTIFICATION_CHANNEL_ID,
+        "图片生成结果",
+        NotificationManager.IMPORTANCE_DEFAULT
+    ).apply {
+        description = "图片生成完成后的提示"
+    }
+
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    manager.createNotificationChannel(channel)
+}
+
+fun notifyImageReady(context: Context, imageUri: String) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) {
+        return
+    }
+
+    val openIntent = Intent(Intent.ACTION_VIEW).apply {
+        if (imageUri.startsWith("content://")) {
+            setDataAndType(Uri.parse(imageUri), "image/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } else {
+            setPackage(context.packageName)
+        }
+    }
+
+    val pendingIntent = PendingIntent.getActivity(
+        context,
+        1001,
+        openIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val notification = NotificationCompat.Builder(context, IMAGE_NOTIFICATION_CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_menu_gallery)
+        .setContentTitle("图片生成完成")
+        .setContentText(if (imageUri.startsWith("content://")) "已保存到相册，可点击查看。" else "可回到应用查看结果。")
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .build()
+
+    NotificationManagerCompat.from(context).notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+}
+
+fun shareImageFromHistory(context: Context, imageUri: String) {
+    if (!imageUri.startsWith("content://")) return
+
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/*"
+        putExtra(Intent.EXTRA_STREAM, Uri.parse(imageUri))
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(
+        Intent.createChooser(shareIntent, "分享图片")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
 }
 
 fun saveToGallery(context: Context, bytes: ByteArray, format: String): String {
