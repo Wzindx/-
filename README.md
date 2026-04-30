@@ -154,6 +154,43 @@ README.md
 
 GitHub Actions 会自动执行 Android APK 构建，并在 Release 流程中覆盖上传发布资产。
 
+### 开发者快速启动
+
+推荐环境：
+
+- Android Studio 最新稳定版
+- JDK 17
+- Android SDK / Build Tools 与项目 `compileSdk` 保持兼容
+- Gradle Wrapper 8.14.3（仓库已提交 `gradlew`，推荐统一使用 Wrapper 构建）
+
+常用命令：
+
+```bash
+# 构建 Debug APK
+./gradlew :app:assembleDebug
+
+# 构建 Release APK
+./gradlew :app:assembleRelease
+
+# 代码与资源静态检查
+./gradlew :app:lintDebug
+```
+
+本仓库已提交 Gradle Wrapper。请优先使用 `./gradlew`，不要依赖本机全局 Gradle 版本，以保证本地与 CI 构建环境一致。Windows 环境可使用 `gradlew.bat`。
+
+### Release 签名环境变量
+
+Release 构建支持通过环境变量注入签名信息：
+
+```bash
+export ANDROID_KEYSTORE_PATH=/path/to/release.jks
+export ANDROID_KEYSTORE_PASSWORD=***
+export ANDROID_KEY_ALIAS=***
+export ANDROID_KEY_PASSWORD=***
+```
+
+Debug 构建会使用独立包名后缀 `.debug`，避免误用 Release 签名和正式包名，方便在同一设备上并行安装调试版与正式版。
+
 ## 参考与致谢
 
 本项目在产品体验、界面风格和文档组织上参考与借鉴了以下开源项目。感谢这些项目及其开发者提供的启发。
@@ -227,6 +264,6 @@ UniversalImageStudio 是独立项目。
 
 ## License
 
-如果仓库中后续加入 LICENSE 文件，请以 LICENSE 文件为准。
+本项目采用 Apache License 2.0 授权，详见仓库根目录的 `LICENSE` 文件。
 
-在未明确添加许可证前，请不要默认将本项目视为可自由商用或再分发的开源授权项目。
+除非特别说明，项目中提到的第三方项目名称、链接、商标和服务仍归其各自权利人所有。
