@@ -16,6 +16,10 @@ on:
         type: string
         default: "v1.9"
 
+concurrency:
+  group: android-release-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   actions: read
@@ -30,39 +34,60 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout latest main
+      - name: Checkout release source
         uses: actions/checkout@v5
         with:
-          ref: main
+          ref: ${{ github.event.workflow_run.head_sha || 'main' }}
           fetch-depth: 0
 
+      - name: Resolve release variables
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION_NAME="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)"
+          TAG_NAME="${{ github.event.inputs.tag_name || '' }}"
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="v$VERSION_NAME"
+          fi
+
+          RELEASE_ENABLED="true"
+          RELEASE_SHA="$(git rev-parse HEAD)"
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            RELEASE_SHA="${{ github.event.workflow_run.head_sha }}"
+            git fetch origin main --depth=1
+            LATEST_MAIN_SHA="$(git rev-parse origin/main)"
+            if [ "$RELEASE_SHA" != "$LATEST_MAIN_SHA" ]; then
+              echo "Skip stale release: workflow_run SHA $RELEASE_SHA is not latest main $LATEST_MAIN_SHA."
+              RELEASE_ENABLED="false"
+            fi
+          fi
+
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
+          echo "RELEASE_ENABLED=$RELEASE_ENABLED" >> "$GITHUB_ENV"
+
       - name: Set up JDK 23
+        if: env.RELEASE_ENABLED == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '23'
 
       - name: Set up Android SDK
+        if: env.RELEASE_ENABLED == 'true'
         uses: android-actions/setup-android@v4
 
       - name: Set up Gradle
+        if: env.RELEASE_ENABLED == 'true'
         uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: '8.14.3'
 
-      - name: Resolve release variables
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION_NAME="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)"
-          TAG_NAME="${{ github.event.inputs.tag_name || '' }}"
-          if [ -z "$TAG_NAME" ]; then
-            TAG_NAME="v$VERSION_NAME"
-          fi
-          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
-          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
-
       - name: Prepare release signing
+        if: env.RELEASE_ENABLED == 'true'
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -85,6 +110,7 @@ jobs:
           echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Build Release APK
+        if: env.RELEASE_ENABLED == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -102,6 +128,7 @@ jobs:
           ls -lah dist/app-release.apk
 
       - name: Publish APK to GitHub Release
+        if: env.RELEASE_ENABLED == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -134,6 +161,7 @@ jobs:
           ### 性能与交互
 
           - 参考图选择后延迟到生成时再读取，减少刚打开图片后的卡顿。
+          - 滚动页面禁用边界回弹效果，减少底部导航栏附近的回弹卡顿。
           - 接口、模型与生成参数选择器使用对话框列表展示，避免底部弹层带来的重布局压力。
           - 生成完成后支持通知栏提示。
 
@@ -142,6 +170,7 @@ jobs:
           - Release workflow 会覆盖上传同一个 `v1.9` 的 `app-release.apk` 资产。
           - Build workflow 不再依赖 `actions/upload-artifact`，避免 artifact 服务异常影响 APK 生成。
           - 文档类变更不再触发无意义 APK 构建与重新发布。
+          - 旧构建完成后不会再拿最新 main 重复发布，避免 tag 与 APK 被错误覆盖。
 
           ## 下载
 
@@ -151,7 +180,7 @@ jobs:
           - 文件：`app-release.apk`
           BODY
 
-          git tag -f "$TAG_NAME" "$GITHUB_SHA"
+          git tag -f "$TAG_NAME" "$RELEASE_SHA"
           git push origin "refs/tags/$TAG_NAME" --force
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
