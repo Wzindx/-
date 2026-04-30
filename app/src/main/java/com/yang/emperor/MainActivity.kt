@@ -134,9 +134,9 @@ class MainActivity : ComponentActivity() {
                 AndroidColor.TRANSPARENT,
                 AndroidColor.TRANSPARENT
             ),
-            navigationBarStyle = SystemBarStyle.auto(
-                AndroidColor.TRANSPARENT,
-                AndroidColor.TRANSPARENT
+            navigationBarStyle = SystemBarStyle.light(
+                AndroidColor.rgb(244, 246, 255),
+                AndroidColor.rgb(244, 246, 255)
             )
         )
         setContent { AppTheme { MainScreen(activityTaskScope = activityTaskScope) } }
@@ -321,7 +321,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         status = "正在读取参考图..."
         activityTaskScope.launch {
             val bytes = withContext(Dispatchers.IO) {
-                runCatching { readAllBytes(context, uri) }.getOrNull()
+                runCatching { readReferenceImageBytes(context, uri) }.getOrNull()
             }
 
             selectedImageBytes = bytes
@@ -1080,6 +1080,7 @@ private fun AppBottomSheetPanel(
         sheetMaxWidth = Dp.Unspecified,
         containerColor = Color(0xFFF4F6FF),
         contentColor = Color(0xFF111827),
+        scrimColor = Color.Transparent,
         shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
         tonalElevation = 8.dp,
         dragHandle = {
@@ -1095,6 +1096,7 @@ private fun AppBottomSheetPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(Color(0xFFF4F6FF))
                 .heightIn(max = 560.dp)
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
@@ -1774,6 +1776,42 @@ fun decodePreviewBitmap(bytes: ByteArray, maxSide: Int = 1600) =
 fun endpoint(baseUrl: String, path: String): String {
     val b = baseUrl.trim().trimEnd('/')
     return if (b.endsWith("/v1")) "$b$path" else "$b/v1$path"
+}
+
+fun readReferenceImageBytes(context: Context, imageUri: Uri): ByteArray {
+    val bytes = readAllBytes(context, imageUri)
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    val width = bounds.outWidth
+    val height = bounds.outHeight
+    if (width <= 0 || height <= 0) return bytes
+
+    val maxDimension = 2048
+    var sample = 1
+    while (maxOf(width, height) / sample > maxDimension) {
+        sample *= 2
+    }
+
+    if (sample <= 1 && bytes.size <= 6 * 1024 * 1024) {
+        return bytes
+    }
+
+    val bitmap = BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+    ) ?: return bytes
+
+    return ByteArrayOutputStream().use { output ->
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+        bitmap.recycle()
+        output.toByteArray()
+    }
 }
 
 fun readAllBytes(context: Context, imageUri: Uri): ByteArray =
