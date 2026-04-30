@@ -674,7 +674,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         }
 
         ScreenRoute.MAIN -> Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = pageBg,
             bottomBar = {
                 BottomNavigationBar(
                     currentRoute = currentRoute,
@@ -685,9 +685,9 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .navigationBarsPadding(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                    .background(pageBg)
+                    .padding(padding),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
