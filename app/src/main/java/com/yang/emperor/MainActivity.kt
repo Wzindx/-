@@ -2235,8 +2235,11 @@ fun callEditResponses(
     val inputImageDataUrl = "data:image/png;base64," + Base64.encodeToString(sourceImageBytes, Base64.NO_WRAP)
 
     val inputContent = JSONArray().apply {
-        put(JSONObject().put("type", "input_text").put("text", "Use the following text as the complete prompt. Do not rewrite it:\
-$prompt"))
+        put(
+            JSONObject()
+                .put("type", "input_text")
+                .put("text", "Use the following text as the complete prompt. Do not rewrite it:\n$prompt")
+        )
         put(JSONObject().put("type", "input_image").put("image_url", inputImageDataUrl))
     }
 
