@@ -1,12 +1,6 @@
 # UniversalImageStudio
 
-UniversalImageStudio 是一个面向 Android 的通用图像生成工坊，整合了文生图、图生图、兼容接口调用、后台任务、历史记录、首次配置引导和移动端交互优化。
-
-应用包名：
-
-```text
-com.yang.emperor
-```
+UniversalImageStudio 是一个面向 Android 的通用图像生成工坊，整合文生图、图生图、兼容接口调用、后台任务、历史记录、首次配置引导和移动端交互优化。
 
 ## 功能总览
 
@@ -54,13 +48,15 @@ com.yang.emperor
 ### 首页与移动端交互
 
 - 首页创作内容支持滚动，接口与模型、生成参数等区域可自然滑动。
-- 底部导航减少大色块压迫感，选中态更轻量。
+- 底部导航选中态轻量化，减少大色块压迫感。
 - 生成按钮优化了高亮、反色和禁用态对比。
 - 接口与模型、生成参数等底部面板采用半屏弹窗：
   - 不占满整个屏幕
   - 内容内部可滚动
   - 支持下滑关闭
   - 点击空白区域也可关闭
+- 下拉菜单在栏下方自然弹出，内容过多时限制高度并支持滚动。
+- 参考图读取流程已优化，大图会采样处理以减少选图瞬间卡顿。
 
 ## 使用流程
 
@@ -83,7 +79,7 @@ com.yang.emperor
 app-release.apk
 ```
 
-当前包名：
+应用包名：
 
 ```text
 com.yang.emperor
@@ -106,6 +102,7 @@ gradle :app:assembleRelease
 
 ```text
 app/src/main/java/com/yang/emperor/MainActivity.kt
+.github/workflows/android.yml
 .github/workflows/release.yml
 README.md
 ```
