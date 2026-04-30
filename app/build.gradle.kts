@@ -42,9 +42,8 @@ android {
 
     buildTypes {
         debug {
-            if (hasReleaseSigning) {
-                signingConfig = signingConfigs.getByName("releaseSigning")
-            }
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
         release {
             isMinifyEnabled = true
@@ -84,7 +83,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.security.crypto)
     debugImplementation(libs.androidx.ui.tooling)
 }
