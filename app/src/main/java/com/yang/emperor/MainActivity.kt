@@ -1612,26 +1612,15 @@ private fun AppEditableDropdownField(
                             }
                         )
                     }
-                    // 分隔线
-                    HorizontalDivider()
-                    // 自定义输入选项
                     DropdownMenuItem(
                         text = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    "自定义输入",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
+                            Text(
+                                text = "自定义输入",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         },
                         onClick = {
                             expanded = false
@@ -1779,13 +1768,18 @@ fun endpoint(baseUrl: String, path: String): String {
 }
 
 fun readReferenceImageBytes(context: Context, imageUri: Uri): ByteArray {
-    val bytes = readAllBytes(context, imageUri)
+    val resolver = context.contentResolver
 
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    resolver.openInputStream(imageUri)?.use { input ->
+        BitmapFactory.decodeStream(input, null, bounds)
+    } ?: error("无法读取参考图")
+
     val width = bounds.outWidth
     val height = bounds.outHeight
-    if (width <= 0 || height <= 0) return bytes
+    if (width <= 0 || height <= 0) {
+        return readAllBytes(context, imageUri)
+    }
 
     val maxDimension = 2048
     var sample = 1
@@ -1793,22 +1787,27 @@ fun readReferenceImageBytes(context: Context, imageUri: Uri): ByteArray {
         sample *= 2
     }
 
-    if (sample <= 1 && bytes.size <= 6 * 1024 * 1024) {
-        return bytes
+    val originalSize = runCatching {
+        resolver.openFileDescriptor(imageUri, "r")?.use { it.statSize }
+    }.getOrNull() ?: -1L
+
+    if (sample <= 1 && originalSize in 0..(6L * 1024L * 1024L)) {
+        return readAllBytes(context, imageUri)
     }
 
-    val bitmap = BitmapFactory.decodeByteArray(
-        bytes,
-        0,
-        bytes.size,
-        BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.ARGB_8888
-        }
-    ) ?: return bytes
+    val bitmap = resolver.openInputStream(imageUri)?.use { input ->
+        BitmapFactory.decodeStream(
+            input,
+            null,
+            BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+        )
+    } ?: return readAllBytes(context, imageUri)
 
     return ByteArrayOutputStream().use { output ->
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output)
         bitmap.recycle()
         output.toByteArray()
     }
