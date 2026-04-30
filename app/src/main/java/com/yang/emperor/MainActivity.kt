@@ -293,9 +293,9 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var selectedImage by remember { mutableStateOf(null as Uri?) }
     var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
     var isReadingReferenceImage by remember { mutableStateOf(false) }
-    var showReferenceSheet by rememberSaveable { mutableStateOf(false) }
-    var showModelSheet by rememberSaveable { mutableStateOf(false) }
-    var showParamsSheet by rememberSaveable { mutableStateOf(false) }
+    var showReferenceSheet by remember { mutableStateOf(false) }
+    var showModelSheet by remember { mutableStateOf(false) }
+    var showParamsSheet by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var settingsNotice by remember { mutableStateOf("") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
@@ -304,6 +304,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var showOnboarding by rememberSaveable {
         mutableStateOf(!prefs.getBoolean("onboardingDone", false) && (apiKey.isBlank() || baseUrl.isBlank()))
     }
+    var onboardingReturnRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN.name) }
     val runningTasks = remember { mutableStateListOf<String>() }
     val isConfigured = baseUrl.isNotBlank() && apiKey.isNotBlank()
     val runningCount = runningTasks.size
@@ -312,20 +313,11 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         ActivityResultContracts.RequestPermission()
     ) { }
 
-    LaunchedEffect(Unit) {
-        ensureImageNotificationChannel(context)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
     val currentSizes = if (editMode) editSizes else generationSizes
     val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()
 
-    LaunchedEffect(selectedImageBytes) {
-        editMode = selectedImageBytes != null
+    LaunchedEffect(selectedImage) {
+        editMode = selectedImage != null
     }
 
     LaunchedEffect(editMode) {
@@ -336,28 +328,16 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedImage = uri
+        selectedImageBytes = null
+        isReadingReferenceImage = false
+
         if (uri == null) {
-            isReadingReferenceImage = false
+            status = ""
             return@rememberLauncherForActivityResult
         }
 
-        isReadingReferenceImage = true
-        status = "正在读取参考图..."
-        activityTaskScope.launch {
-            val bytes = withContext(Dispatchers.IO) {
-                runCatching { readReferenceImageBytes(context, uri) }.getOrNull()
-            }
-
-            selectedImageBytes = bytes
-            isReadingReferenceImage = false
-
-            if (bytes == null) {
-                status = "参考图已选择，但暂时无法读取，请重新选择一次或改用 Images API / Responses API。"
-            } else {
-                showReferenceSheet = false
-                status = ""
-            }
-        }
+        showReferenceSheet = false
+        status = "参考图已选择，将在生成时读取，避免打开图片后卡顿。"
     }
 
 
@@ -463,6 +443,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             onSkip = {
                 prefs.edit().putBoolean("onboardingDone", true).apply()
                 showOnboarding = false
+                currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
             },
             onSave = {
                 prefs.edit()
@@ -473,7 +454,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 settingsNotice = "接口信息已保存。"
                 status = ""
                 showOnboarding = false
-                currentRoute = ScreenRoute.MAIN
+                currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
             }
         )
         return
@@ -686,6 +667,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 currentRoute = ScreenRoute.SETTINGS
             },
             onShowOnboarding = {
+                onboardingReturnRoute = ScreenRoute.SETTINGS.name
                 showOnboarding = true
             },
             onSave = {
@@ -799,7 +781,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                         verticalArrangement = Arrangement.spacedBy(3.dp)
                                     ) {
                                         Text(
-                                            text = if (isReadingReferenceImage) "读取图片中..." else if (selectedImageBytes != null) "更换图片" else "选择图片",
+                                            text = if (selectedImage != null) "更换图片" else "选择图片",
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.titleMedium
                                         )
@@ -811,7 +793,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
-                                        } else if (selectedImageBytes != null) {
+                                        } else if (selectedImage != null) {
                                             Text(
                                                 text = selectedImage?.lastPathSegment ?: "已选择图片",
                                                 color = Color(0xFF6B7280),
@@ -840,18 +822,43 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             }
 
                             Button(
-                                    enabled = prompt.isNotBlank() && isConfigured,
-                                    onClick = {
+                                enabled = prompt.isNotBlank() && isConfigured && !isReadingReferenceImage,
+                                onClick = {
+                                    ensureImageNotificationChannel(context)
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+
+                                    activityTaskScope.launch {
+                                        val referenceBytes = selectedImage?.let { uri ->
+                                            isReadingReferenceImage = true
+                                            status = "正在读取参考图..."
+                                            withContext(Dispatchers.IO) {
+                                                runCatching { readReferenceImageBytes(context, uri) }
+                                            }.onFailure {
+                                                status = "参考图读取失败：${it.message ?: "未知错误"}"
+                                            }.getOrNull().also {
+                                                selectedImageBytes = it
+                                                isReadingReferenceImage = false
+                                            }
+                                        }
+
+                                        if (selectedImage != null && referenceBytes == null) {
+                                            return@launch
+                                        }
+
                                         val task = ImageTask(
                                             id = UUID.randomUUID().toString(),
                                             time = now(),
-                                            mode = if (selectedImageBytes != null) "edit" else "generate",
-                                            model = if (selectedImageBytes != null) editModel else generateModel,
+                                            mode = if (referenceBytes != null) "edit" else "generate",
+                                            model = if (referenceBytes != null) editModel else generateModel,
                                             prompt = prompt,
                                             baseUrl = baseUrl.trim(),
                                             apiKey = apiKey.trim(),
                                             apiMode = apiMode,
-                                            imageBytes = selectedImageBytes,
+                                            imageBytes = referenceBytes,
                                             size = size,
                                             quality = quality,
                                             count = count,
@@ -861,22 +868,23 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                         startBackgroundTask(task)
                                         status = "已开始后台生成，可继续创建新任务。"
                                         currentRoute = ScreenRoute.HISTORY
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )) {
-                                    Text("生成图像")
-                                }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Text(if (isReadingReferenceImage) "读取参考图..." else "生成图像")
+                            }
 
                             ConfigEntryCard(
                                 title = "接口与模型",
                                 primary = apiMode.label,
-                                secondary = "模型：${if (selectedImageBytes != null) editModel else generateModel}",
+                                secondary = "模型：${if (selectedImage != null) editModel else generateModel}",
                                 onClick = { showModelSheet = true }
                             )
 
@@ -1045,7 +1053,7 @@ private fun OnboardingScreen(
     BackHandler(enabled = true) {
         // 引导页不响应系统返回键，避免误触直接回到主页面。
     }
-    var page by rememberSaveable { mutableStateOf(0) }
+    var page by remember { mutableStateOf(0) }
     val totalPages = 4
     val canSave = baseUrl.isNotBlank() && apiKey.isNotBlank()
 
@@ -1117,18 +1125,18 @@ private fun OnboardingScreen(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                TextButton(
-                    onClick = { if (page > 0) page-- },
-                    enabled = page > 0,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (page > 0) "上一步" else "")
+                if (page > 0) {
+                    TextButton(
+                        onClick = { page-- },
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    ) {
+                        Text("上一步")
+                    }
                 }
+
                 Button(
                     onClick = {
                         if (page < totalPages - 1) {
@@ -1139,7 +1147,9 @@ private fun OnboardingScreen(
                             onSkip()
                         }
                     },
-                    modifier = Modifier.weight(1.4f),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth(0.56f),
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = accent)
                 ) {
@@ -1331,7 +1341,7 @@ private fun AppBottomSheetPanel(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1356,7 +1366,7 @@ private fun AppBottomSheetPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFFF4F6FF))
-                .heightIn(max = 560.dp)
+                .heightIn(max = 480.dp)
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 28.dp),
@@ -1688,7 +1698,43 @@ private fun AppDropdownField(
     options: List<String>,
     onSelected: (String) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(title) },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(options) { option ->
+                        TextButton(
+                            onClick = {
+                                onSelected(option)
+                                showDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = option,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -1696,61 +1742,34 @@ private fun AppDropdownField(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold
         )
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Surface(
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .clickable { showDialog = true },
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .clickable { expanded = true },
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    .padding(horizontal = 16.dp, vertical = 15.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 15.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = selected,
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null
-                    )
-                }
-            }
-
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .width(280.dp)
-                    .heightIn(max = 220.dp)
-                    .background(MaterialTheme.colorScheme.surface)
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = option,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        onClick = {
-                            onSelected(option)
-                            expanded = false
-                        }
-                    )
-                }
+                Text(
+                    text = selected,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null
+                )
             }
         }
     }
@@ -1765,9 +1784,61 @@ private fun AppEditableDropdownField(
     onValueChange: (String) -> Unit,
     onSelected: (String) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
     var showCustomDialog by remember { mutableStateOf(false) }
     var customInput by remember { mutableStateOf("") }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(title) },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(options) { option ->
+                        TextButton(
+                            onClick = {
+                                onSelected(option)
+                                showDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = option,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    item {
+                        TextButton(
+                            onClick = {
+                                showDialog = false
+                                showCustomDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "自定义输入",
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 
     if (showCustomDialog) {
         AlertDialog(
@@ -1813,75 +1884,33 @@ private fun AppEditableDropdownField(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold
         )
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Surface(
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .clickable { showDialog = true },
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .clickable { expanded = true },
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    .padding(horizontal = 16.dp, vertical = 15.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 15.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = value.ifBlank { placeholder },
-                        modifier = Modifier.weight(1f),
-                        color = if (value.isBlank()) Color(0xFF9CA3AF) else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null
-                    )
-                }
-            }
-
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .width(280.dp)
-                    .heightIn(max = 220.dp)
-                    .background(MaterialTheme.colorScheme.surface)
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = option,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        onClick = {
-                            onSelected(option)
-                            expanded = false
-                        }
-                    )
-                }
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = "自定义输入",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        showCustomDialog = true
-                    }
+                Text(
+                    text = value.ifBlank { placeholder },
+                    modifier = Modifier.weight(1f),
+                    color = if (value.isBlank()) Color(0xFF9CA3AF) else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null
                 )
             }
         }
