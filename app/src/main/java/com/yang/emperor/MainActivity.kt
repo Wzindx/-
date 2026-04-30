@@ -1451,27 +1451,33 @@ private fun AppDropdownField(
                     .matchParentSize()
                     .clickable { expanded = !expanded }
             )
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
+            Box(
                 modifier = Modifier
-                    .heightIn(max = 280.dp)
-                    .background(MaterialTheme.colorScheme.surface)
+                    .align(Alignment.BottomEnd)
+                    .size(1.dp)
             ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = option,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        onClick = {
-                            onSelected(option)
-                            expanded = false
-                        }
-                    )
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier
+                        .heightIn(max = 280.dp)
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = option,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            onClick = {
+                                onSelected(option)
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -1562,54 +1568,60 @@ private fun AppEditableDropdownField(
                     .matchParentSize()
                     .clickable { expanded = !expanded }
             )
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
+            Box(
                 modifier = Modifier
-                    .heightIn(max = 320.dp)
-                    .background(MaterialTheme.colorScheme.surface)
+                    .align(Alignment.BottomEnd)
+                    .size(1.dp)
             ) {
-                options.forEach { option ->
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier
+                        .heightIn(max = 320.dp)
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = option,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            onClick = {
+                                onSelected(option)
+                                expanded = false
+                            }
+                        )
+                    }
+                    // 分隔线
+                    HorizontalDivider()
+                    // 自定义输入选项
                     DropdownMenuItem(
                         text = {
-                            Text(
-                                text = option,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "自定义输入",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         },
                         onClick = {
-                            onSelected(option)
                             expanded = false
+                            showCustomDialog = true
                         }
                     )
                 }
-                // 分隔线
-                HorizontalDivider()
-                // 自定义输入选项
-                DropdownMenuItem(
-                    text = {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                "自定义输入",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    },
-                    onClick = {
-                        expanded = false
-                        showCustomDialog = true
-                    }
-                )
             }
         }
     }
