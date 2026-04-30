@@ -85,7 +85,11 @@ app-release.apk
 com.yang.emperor
 ```
 
-如果手机上已安装旧版，系统可能会将新版识别为另一个应用。建议手动卸载旧版后再安装新版。
+## 参考与说明
+
+本项目的产品思路参考了 [CookSleep/gpt_image_playground](https://github.com/CookSleep/gpt_image_playground) 中关于图像生成工作流、模型参数组织和轻量化 Playground 体验的设计方向。
+
+当前项目为 Android Kotlin / Jetpack Compose 实现，未在源码中保留该项目的直接代码引用或依赖痕迹。
 
 ## 开发与构建
 
