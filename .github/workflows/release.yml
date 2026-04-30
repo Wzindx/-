@@ -1,5 +1,8 @@
 name: Release Android APK
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   workflow_run:
     workflows: ["Build Android APK"]
@@ -11,10 +14,7 @@ on:
         description: "Release tag to publish to, e.g. v1.9"
         required: false
         type: string
-      version_name:
-        description: "Optional version name override, e.g. 1.9"
-        required: false
-        type: string
+        default: "v1.9"
 
 permissions:
   contents: write
@@ -27,56 +27,64 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout
+      - name: Checkout latest main
         uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
 
-      - name: Download Release APK artifact from triggering workflow
-        if: github.event_name == 'workflow_run'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist-release dist
-          ARTIFACT_NAME="universal-image-studio-release-apk"
-          RUN_ID="${{ github.event.workflow_run.id }}"
-          gh run download "$RUN_ID" --name "$ARTIFACT_NAME" --dir dist-release
-          RELEASE_APK="$(find dist-release -name '*release*.apk' -print -quit 2>/dev/null || true)"
-          if [ -z "$RELEASE_APK" ]; then
-            echo "No release APK artifact found from triggering workflow."
-            exit 1
-          fi
-          cp "$RELEASE_APK" dist/app-release.apk
-
-      - name: Resolve release variables
-        shell: bash
-        run: |
-          set -euo pipefail
-          GRADLE_VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)
-          TAG_NAME="v$GRADLE_VERSION_NAME"
-          echo "VERSION_NAME=$GRADLE_VERSION_NAME" >> "$GITHUB_ENV"
-          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
-
-      - name: Set up Java
-        if: github.event_name == 'workflow_dispatch'
+      - name: Set up JDK 23
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '23'
 
       - name: Set up Android SDK
-        if: github.event_name == 'workflow_dispatch'
         uses: android-actions/setup-android@v4
 
       - name: Set up Gradle
-        if: github.event_name == 'workflow_dispatch'
         uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: '8.14.3'
 
-      - name: Build Release APK for manual dispatch
-        if: github.event_name == 'workflow_dispatch'
+      - name: Resolve release variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n 1)"
+          TAG_NAME="${{ github.event.inputs.tag_name || '' }}"
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="v$VERSION_NAME"
+          fi
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_ENV"
+
+      - name: Prepare release signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not configured; release APK will use default signing behavior."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/android-signing"
+          KEYSTORE_PATH="$RUNNER_TEMP/android-signing/release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build Release APK
         shell: bash
         run: |
           set -euo pipefail
@@ -91,36 +99,40 @@ jobs:
           RELEASE_APK="$(find app/build/outputs/apk/release -name '*release*.apk' -print -quit 2>/dev/null || true)"
           test -n "$RELEASE_APK"
           cp "$RELEASE_APK" dist/app-release.apk
+          ls -lah dist/app-release.apk
 
-      - name: Verify release APK exists
-        shell: bash
-        run: |
-          set -euo pipefail
-          ls -lah dist
-          test -f dist/app-release.apk
-
-      - name: Delete stale debug APK asset from this release
+      - name: Publish APK to GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set +e
-          gh release delete-asset "$TAG_NAME" app-debug.apk -y
-          exit 0
+          set -euo pipefail
 
-      - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: UniversalImageStudio ${{ env.TAG_NAME }}
-          body: |
-            - v1.9 全面升级 Kotlin 2.3.20、AGP 8.12.1、Compose BOM 2026.04.00。
-            - 清理旧版兼容残留，修复新版 Compose / Material3 API 兼容问题。
-            - UI 调整为 MIUIX 风格：大圆角、浅色分组卡片、柔和蓝紫主色和更清晰的页面层级。
-            - 参考 HyperCeiler 的首次体验思路，新增多页 OOBE 引导：欢迎、能力说明、接口配置、开始使用。
-            - OOBE 支持跳过，后续仍可在设置页重新打开引导。
-            - 下载下方 `app-release.apk` 安装即可，包名：`com.yang.emperor`。
-          draft: false
-          prerelease: false
-          make_latest: true
-          overwrite_files: true
+          BODY_FILE="$RUNNER_TEMP/release-body.md"
+          cat > "$BODY_FILE" <<'BODY'
+          - v1.9 全面升级 Kotlin 2.3.20、AGP 8.12.1、Compose BOM 2026.04.01。
+          - 清理旧版兼容残留，修复新版 Compose / Material3 API 兼容问题。
+          - UI 调整为 MIUIX 风格：大圆角、浅色分组卡片、柔和蓝紫主色和更清晰的页面层级。
+          - 精简 OOBE 引导排版，优化接口/模型与生成参数面板性能。
+          - 新增生成完成通知、自动保存到相册与历史记录图片分享。
+          - 下载下方 `app-release.apk` 安装即可，包名：`com.yang.emperor`。
+          BODY
+
+          git tag -f "$TAG_NAME" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG_NAME" --force
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" \
+              --title "UniversalImageStudio $TAG_NAME" \
+              --notes-file "$BODY_FILE" \
+              --latest
+          else
+            gh release create "$TAG_NAME" \
+              --title "UniversalImageStudio $TAG_NAME" \
+              --notes-file "$BODY_FILE" \
+              --latest
+          fi
+
+          gh release delete-asset "$TAG_NAME" app-release.apk -y || true
+          gh release delete-asset "$TAG_NAME" app-debug.apk -y || true
+          gh release upload "$TAG_NAME" dist/app-release.apk --clobber
