@@ -29,7 +29,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,6 +83,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -266,7 +269,7 @@ private val errorBg = Color(0xFFFFECEC)
 private val errorText = Color(0xFFC03B3B)
 private const val IMAGE_NOTIFICATION_CHANNEL_ID = "image_generation_result"
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(activityTaskScope: CoroutineScope) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -706,14 +709,15 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 )
             }
         ) { padding ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(pageBg)
-                    .padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
+            CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(pageBg)
+                        .padding(padding),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                 item {
                     Column(
                         modifier = Modifier
@@ -967,6 +971,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 }
 
             }
+            }
         }
 
         ScreenRoute.HISTORY -> Scaffold(
@@ -978,14 +983,15 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 )
             }
         ) { padding ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(pageBg)
-                    .padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(pageBg)
+                        .padding(padding),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 item {
                     Row(
                         modifier = Modifier
@@ -1044,6 +1050,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         )
                     }
                 }
+            }
             }
         }
     }
@@ -1507,7 +1514,7 @@ private fun BottomNavButton(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun SettingsScreen(
     baseUrl: String,
@@ -1535,16 +1542,17 @@ private fun SettingsScreen(
     Scaffold(
         containerColor = pageBg
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(outerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 18.dp)
-                .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(outerPadding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 18.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             ElevatedCard(
                 colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
                 shape = RoundedCornerShape(28.dp)
@@ -1603,6 +1611,7 @@ private fun SettingsScreen(
                     }
                 }
             }
+        }
         }
     }
 }
