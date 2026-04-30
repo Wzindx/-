@@ -83,6 +83,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -272,10 +274,6 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
 
     var currentRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN) }
 
-    BackHandler(enabled = currentRoute != ScreenRoute.MAIN) {
-        currentRoute = ScreenRoute.MAIN
-    }
-
     var baseUrl by rememberSaveable { mutableStateOf(prefs.getString("baseUrl", "https://api.openai.com/v1") ?: "") }
     var apiKey by rememberSaveable { mutableStateOf(prefs.getString("apiKey", "") ?: "") }
     var apiMode by rememberSaveable { mutableStateOf(ApiMode.from(prefs.getString("apiMode", ApiMode.IMAGES.value))) }
@@ -301,11 +299,18 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
     var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
-    var showOnboarding by rememberSaveable {
-        mutableStateOf(!prefs.getBoolean("onboardingDone", false) && (apiKey.isBlank() || baseUrl.isBlank()))
+    val shouldShowInitialOnboarding = remember {
+        !prefs.getBoolean("onboardingDone", false) && (apiKey.isBlank() || baseUrl.isBlank())
     }
-    var onboardingReturnRoute by rememberSaveable { mutableStateOf(ScreenRoute.MAIN.name) }
+    var showOnboarding by remember { mutableStateOf(shouldShowInitialOnboarding) }
+    var onboardingReturnRoute by remember { mutableStateOf(ScreenRoute.MAIN.name) }
+    var onboardingSessionId by remember { mutableLongStateOf(0L) }
     val runningTasks = remember { mutableStateListOf<String>() }
+
+    BackHandler(enabled = currentRoute != ScreenRoute.MAIN && !showOnboarding) {
+        currentRoute = ScreenRoute.MAIN
+    }
+
     val isConfigured = baseUrl.isNotBlank() && apiKey.isNotBlank()
     val runningCount = runningTasks.size
 
@@ -435,28 +440,30 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     }
 
     if (showOnboarding) {
-        OnboardingScreen(
-            baseUrl = baseUrl,
-            apiKey = apiKey,
-            onBaseUrlChange = { baseUrl = it },
-            onApiKeyChange = { apiKey = it },
-            onSkip = {
-                prefs.edit().putBoolean("onboardingDone", true).apply()
-                showOnboarding = false
-                currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
-            },
-            onSave = {
-                prefs.edit()
-                    .putString("baseUrl", baseUrl.trim())
-                    .putString("apiKey", apiKey.trim())
-                    .putBoolean("onboardingDone", true)
-                    .apply()
-                settingsNotice = "接口信息已保存。"
-                status = ""
-                showOnboarding = false
-                currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
-            }
-        )
+        key(onboardingSessionId) {
+            OnboardingScreen(
+                baseUrl = baseUrl,
+                apiKey = apiKey,
+                onBaseUrlChange = { baseUrl = it },
+                onApiKeyChange = { apiKey = it },
+                onSkip = {
+                    prefs.edit().putBoolean("onboardingDone", true).apply()
+                    showOnboarding = false
+                    currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
+                },
+                onSave = {
+                    prefs.edit()
+                        .putString("baseUrl", baseUrl.trim())
+                        .putString("apiKey", apiKey.trim())
+                        .putBoolean("onboardingDone", true)
+                        .apply()
+                    settingsNotice = "接口信息已保存。"
+                    status = ""
+                    showOnboarding = false
+                    currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
+                }
+            )
+        }
         return
     }
 
@@ -667,7 +674,9 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 currentRoute = ScreenRoute.SETTINGS
             },
             onShowOnboarding = {
+                currentRoute = ScreenRoute.SETTINGS
                 onboardingReturnRoute = ScreenRoute.SETTINGS.name
+                onboardingSessionId = System.nanoTime()
                 showOnboarding = true
             },
             onSave = {
