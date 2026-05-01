@@ -614,7 +614,10 @@ fun HistoryCard(
                         onPreview()
                     }
                 },
-                onLongClick = onLongPress
+                onLongClick = {
+                    // 长按是历史记录唯一删除/选择入口：外层不再提供显式删除按钮。
+                    onLongPress()
+                }
             )
     ) {
         Row(
@@ -642,7 +645,7 @@ fun HistoryCard(
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -669,10 +672,17 @@ fun HistoryCard(
                     )
                 }
 
+                Text(
+                    text = "${item.time} · ${if (item.mode == "edit") "图生图" else "文生图"}",
+                    color = Color(0xFF4B5563),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
                 if (item.error.isNotBlank()) {
+                    val firstErrorLine = item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error
                     Text(
-                        text = "错误：${item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error}",
-                        color = Color(0xFF4B5563),
+                        text = "错误：$firstErrorLine",
+                        color = Color(0xFFE11D48),
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
@@ -697,59 +707,27 @@ fun HistoryCard(
                             }
                         }
                     }
-                } else if (item.prompt.isNotBlank()) {
-                    Text(
-                        text = item.prompt,
-                        color = Color(0xFF4B5563),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
 
-                Text(
-                    text = "${item.time} · ${if (item.mode == "edit") "图生图" else "文生图"}",
-                    color = Color(0xFF4B5563),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                if (!selectionMode) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (item.state == "success" && item.path.startsWith("content://")) {
-                            TextButton(
-                                onClick = onShare,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(22.dp))
-                                    .background(Color(0xFFEDE9FE))
-                                    .padding(horizontal = 8.dp)
-                            ) {
-                                Text(
-                                    text = "分享",
-                                    color = Color(0xFF4C1D95),
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                        TextButton(
-                            onClick = onDelete,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Color(0xFFFFE4E6))
-                                .padding(horizontal = 8.dp)
-                        ) {
-                            Text(
-                                text = "删除",
-                                color = Color(0xFFE11D48),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                if (!selectionMode && item.state == "success" && item.path.startsWith("content://")) {
+                    TextButton(
+                        onClick = onShare,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color(0xFFEDE9FE))
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        Text(
+                            text = "分享",
+                            color = Color(0xFF4C1D95),
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
         }
     }
 }
-
 @Composable
 fun StatusPill(
     text: String,
