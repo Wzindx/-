@@ -158,8 +158,8 @@ jobs:
           set -euo pipefail
 
           BODY_FILE="$RUNNER_TEMP/release-body.md"
-          cat > "$BODY_FILE" <<BODY
-          # UniversalImageStudio $TAG_NAME
+          cat > "$BODY_FILE" <<'BODY'
+          # UniversalImageStudio __TAG_NAME__
 
           本版本是 UniversalImageStudio 的 2.0 最终优化版，重点完成界面架构拆分、移动端交互整理、构建发布链路稳定化，并保持图像生成主流程可直接使用。
 
@@ -187,7 +187,7 @@ jobs:
           下载下方 `app-release.apk` 安装即可。
 
           - 包名：`com.yang.emperor`
-          - 版本：`$VERSION_NAME`
+          - 版本：`__VERSION_NAME__`
           - 文件：`app-release.apk`
 
           ## 验证状态
@@ -197,8 +197,7 @@ jobs:
           - Release APK：通过 CI 构建并自动上传到 GitHub Release。
           BODY
 
-          git tag -f "$TAG_NAME" "$RELEASE_SHA"
-          git push origin "refs/tags/$TAG_NAME" --force
+          sed -i "s/__TAG_NAME__/$TAG_NAME/g; s/__VERSION_NAME__/$VERSION_NAME/g" "$BODY_FILE"
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release edit "$TAG_NAME" \
@@ -207,6 +206,7 @@ jobs:
               --latest
           else
             gh release create "$TAG_NAME" \
+              --target "$RELEASE_SHA" \
               --title "UniversalImageStudio $TAG_NAME" \
               --notes-file "$BODY_FILE" \
               --latest
