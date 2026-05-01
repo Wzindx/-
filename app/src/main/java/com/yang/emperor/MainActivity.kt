@@ -2,6 +2,7 @@ package com.yang.emperor
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
@@ -114,6 +115,30 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.cancel
 import java.util.UUID
+
+private const val DEVELOPER_QQ = "2753761311"
+private const val IMAGEFORGE_REPO_URL = "https://github.com/Wzindx/ImageForge"
+
+private fun openDeveloperQQ(context: Context) {
+    val qqIntent = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("mqqwpa://im/chat?chat_type=wpa&uin=$DEVELOPER_QQ")
+    ).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val webIntent = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("https://wpa.qq.com/msgrd?v=3&uin=$DEVELOPER_QQ&site=qq&menu=yes")
+    ).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    runCatching {
+        context.startActivity(qqIntent)
+    }.getOrElse {
+        runCatching { context.startActivity(webIntent) }
+    }
+}
 
 class MainActivity : ComponentActivity() {
     private val activityTaskScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -959,7 +984,7 @@ private fun OnboardingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "UniversalImageStudio",
+                    text = "ImageForge",
                     color = Color(0xFF111827),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -1244,6 +1269,7 @@ private fun SettingsScreen(
     onSave: () -> Unit,
     outerPadding: PaddingValues = PaddingValues()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Scaffold(
         containerColor = pageBg
     ) { padding ->
@@ -1313,6 +1339,83 @@ private fun SettingsScreen(
 
                     if (settingsNotice.isNotBlank()) {
                         StatusCard(settingsNotice)
+                    }
+
+                    HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.55f))
+
+                    SectionTitle("软件信息", "版本、作者和保存位置")
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .clickable { openDeveloperQQ(context) },
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        shape = RoundedCornerShape(18.dp),
+                        tonalElevation = 1.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = "开发者 QQ",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = "$DEVELOPER_QQ · 点击直达 QQ",
+                                    color = Color(0xFF6B7280),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Text(
+                                text = "›",
+                                fontSize = 28.sp,
+                                color = accent,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        shape = RoundedCornerShape(18.dp),
+                        tonalElevation = 1.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "应用名称",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "ImageForge / 通用图像工坊",
+                                color = Color(0xFF6B7280),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "默认保存目录：Pictures/ImageForge",
+                                color = Color(0xFF6B7280),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "开源仓库：$IMAGEFORGE_REPO_URL",
+                                color = Color(0xFF6B7280),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
             }
