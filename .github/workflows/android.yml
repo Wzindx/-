@@ -225,7 +225,7 @@ jobs:
 
       - name: Upload Lint Reports
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: android-lint-reports
           path: |
@@ -271,7 +271,7 @@ jobs:
           fi
 
       - name: Upload APK Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: UniversalImageStudio-apks
           path: |
