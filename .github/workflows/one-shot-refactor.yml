@@ -1,0 +1,140 @@
+name: One-shot Source Split
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/one-shot-refactor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          token: ${{ github.token }}
+
+      - name: Split MainActivity source
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          base = Path("app/src/main/java/com/yang/emperor")
+          main_path = base / "MainActivity.kt"
+          onboarding_path = base / "OnboardingScreen.kt"
+          settings_path = base / "SettingsScreen.kt"
+
+          text = main_path.read_text(encoding="utf-8")
+          original = text
+
+          if onboarding_path.exists() and settings_path.exists():
+              print("Split files already exist; no-op")
+              raise SystemExit(0)
+
+          package_line = "package com.yang.emperor\n\n"
+          imports_end = text.index("\n\nprivate const val DEVELOPER_QQ")
+          imports = text[len(package_line):imports_end]
+
+          constants_start = text.index("private const val DEVELOPER_QQ")
+          constants_end_marker = "\n\nprivate object ImageForgeBackgroundRunner"
+          constants_end = text.index(constants_end_marker)
+          settings_support_block = text[constants_start:constants_end]
+
+          onboarding_start_marker = "\n@Composable\nprivate fun OnboardingScreen("
+          onboarding_start = text.index(onboarding_start_marker) + 1
+
+          settings_start_marker = "\n@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)\n@Composable\nprivate fun SettingsScreen("
+          settings_start = text.index(settings_start_marker) + 1
+
+          onboarding_block = text[onboarding_start:settings_start]
+          settings_block = text[settings_start:]
+
+          onboarding_block = onboarding_block.replace(
+              "private fun OnboardingScreen(",
+              "internal fun OnboardingScreen(",
+              1
+          )
+          settings_block = settings_block.replace(
+              "private fun SettingsScreen(",
+              "internal fun SettingsScreen(",
+              1
+          )
+
+          onboarding_file = package_line + imports + "\n\n" + onboarding_block.strip() + "\n"
+          settings_file = package_line + imports + "\n\n" + settings_support_block.strip() + "\n\n" + settings_block.strip() + "\n"
+
+          new_main = text[:constants_start] + text[constants_end + 2: onboarding_start] + text[settings_start:settings_start]
+          # Explanation:
+          # - text[:constants_start] keeps package/imports.
+          # - text[constants_end + 2:onboarding_start] keeps ImageForgeBackgroundRunner through MainScreen end.
+          # - onboarding/settings blocks are removed.
+
+          required_main = [
+              "private object ImageForgeBackgroundRunner",
+              "fun MainScreen(activityTaskScope: CoroutineScope)",
+              "SettingsScreen(",
+              "OnboardingScreen(",
+          ]
+          required_onboarding = [
+              "internal fun OnboardingScreen(",
+              "private fun OobeIntroPage(",
+              "private fun OobeFeaturePage(",
+              "private fun OobeConfigPage(",
+              "private fun OobeReadyPage(",
+          ]
+          required_settings = [
+              "internal fun SettingsScreen(",
+              "private const val DEVELOPER_QQ",
+              "private suspend fun loadDeveloperAvatarBitmap",
+              "private fun openDeveloperQQ",
+              "private fun openImageForgeRepository",
+          ]
+
+          for item in required_main:
+              if item not in new_main:
+                  raise SystemExit(f"MainActivity missing required item after split: {item}")
+          for item in required_onboarding:
+              if item not in onboarding_file:
+                  raise SystemExit(f"OnboardingScreen missing required item: {item}")
+          for item in required_settings:
+              if item not in settings_file:
+                  raise SystemExit(f"SettingsScreen missing required item: {item}")
+
+          forbidden_main = [
+              "private fun OnboardingScreen(",
+              "private fun OobeIntroPage(",
+              "private fun SettingsScreen(",
+              "private const val DEVELOPER_QQ",
+          ]
+          for item in forbidden_main:
+              if item in new_main:
+                  raise SystemExit(f"MainActivity still contains moved item: {item}")
+
+          main_path.write_text(new_main, encoding="utf-8")
+          onboarding_path.write_text(onboarding_file, encoding="utf-8")
+          settings_path.write_text(settings_file, encoding="utf-8")
+
+          print("MainActivity bytes:", len(new_main.encode("utf-8")))
+          print("OnboardingScreen bytes:", len(onboarding_file.encode("utf-8")))
+          print("SettingsScreen bytes:", len(settings_file.encode("utf-8")))
+          print("Split completed")
+          PY
+
+      - name: Commit split
+        shell: bash
+        run: |
+          if git diff --quiet -- app/src/main/java/com/yang/emperor/MainActivity.kt app/src/main/java/com/yang/emperor/OnboardingScreen.kt app/src/main/java/com/yang/emperor/SettingsScreen.kt; then
+            echo "No split changes to commit"
+            exit 0
+          fi
+          git config user.name "Wzindx"
+          git config user.email "2753761311@qq.com"
+          git add app/src/main/java/com/yang/emperor/MainActivity.kt app/src/main/java/com/yang/emperor/OnboardingScreen.kt app/src/main/java/com/yang/emperor/SettingsScreen.kt
+          git commit -m "Split onboarding and settings screens"
+          git push
