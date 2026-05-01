@@ -5,10 +5,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -580,24 +583,58 @@ fun StatusCard(status: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryCard(
     item: HistoryItem,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onToggleSelected: () -> Unit = {},
+    onLongPress: () -> Unit = {},
+    onDelete: () -> Unit = {},
+    onCopyError: () -> Unit = {},
     onShare: () -> Unit
 ) {
-    var showPrompt by remember(item.time, item.prompt) { mutableStateOf(false) }
+    val borderColor = if (selected) accent else Color.Transparent
 
     ElevatedCard(
-        colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF5F6FF)),
-        shape = RoundedCornerShape(28.dp)
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (selected) Color(0xFFEFF6FF) else Color(0xFFF5F6FF)
+        ),
+        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(BorderStroke(if (selected) 2.dp else 0.dp, borderColor), RoundedCornerShape(28.dp))
+            .combinedClickable(
+                onClick = {
+                    if (selectionMode) onToggleSelected()
+                },
+                onLongClick = onLongPress
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp, vertical = 18.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
+            if (selectionMode) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp, end = 10.dp)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(if (selected) accent else Color.Transparent)
+                        .border(1.dp, accent, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selected) {
+                        Text("✓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
@@ -612,7 +649,8 @@ fun HistoryCard(
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF111827),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     val pill = when (item.state) {
                         "running" -> Triple("处理中", Color(0xFFFFF3D6), Color(0xFFD97706))
@@ -625,38 +663,43 @@ fun HistoryCard(
                         fg = pill.third
                     )
                 }
-                Text(
-                    text = if (item.error.isNotBlank()) "错误：${item.error}" else "保存地址：${item.path}",
-                    color = Color(0xFF4B5563),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
 
-                if (item.prompt.isNotBlank()) {
-                    TextButton(
-                        onClick = { showPrompt = !showPrompt },
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Color(0xFFEFF6FF))
-                            .padding(horizontal = 4.dp)
+                if (item.error.isNotBlank()) {
+                    Text(
+                        text = "错误：${item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error}",
+                        color = Color(0xFF4B5563),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Surface(
+                        color = Color(0xFFFFF1F2),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text(
-                            text = if (showPrompt) "隐藏描述词" else "查看描述词",
-                            color = Color(0xFF2563EB),
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = item.error,
+                                color = Color(0xFF7F1D1D),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 8,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            TextButton(onClick = onCopyError) {
+                                Text("复制错误详情")
+                            }
+                        }
                     }
-
-                    if (showPrompt) {
-                        Text(
-                            text = "描述词：${item.prompt}",
-                            color = Color(0xFF4B5563),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 6,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                } else {
+                    Text(
+                        text = "保存地址：${item.path}",
+                        color = Color(0xFF4B5563),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Text(
@@ -664,21 +707,36 @@ fun HistoryCard(
                     color = Color(0xFF4B5563),
                     style = MaterialTheme.typography.bodyMedium
                 )
-            }
 
-            if (item.state == "success" && item.path.startsWith("content://")) {
-                TextButton(
-                    onClick = onShare,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Color(0xFFEDE9FE))
-                        .padding(horizontal = 8.dp)
-                ) {
-                    Text(
-                        text = "分享",
-                        color = Color(0xFF4C1D95),
-                        fontWeight = FontWeight.SemiBold
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (item.state == "success" && item.path.startsWith("content://")) {
+                        TextButton(
+                            onClick = onShare,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFEDE9FE))
+                                .padding(horizontal = 8.dp)
+                        ) {
+                            Text(
+                                text = "分享",
+                                color = Color(0xFF4C1D95),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    TextButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color(0xFFFFE4E6))
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        Text(
+                            text = "删除",
+                            color = Color(0xFFE11D48),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }
