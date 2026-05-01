@@ -120,38 +120,60 @@ import java.util.UUID
 import java.net.URL
 
 private const val DEVELOPER_QQ = "2753761311"
-private const val DEVELOPER_QQ_AVATAR_URL = "https://q.qlogo.cn/headimg_dl?dst_uin=$DEVELOPER_QQ&spec=640&img_type=jpg"
+private const val DEVELOPER_QQ_AVATAR_URL = "https://q1.qlogo.cn/g?b=qq&nk=$DEVELOPER_QQ&s=640"
 private const val IMAGEFORGE_REPO_URL = "https://github.com/Wzindx/ImageForge"
 private const val IMAGEFORGE_VERSION_NAME = "2.1"
 
 private suspend fun loadDeveloperAvatarBitmap(): Bitmap? = withContext(Dispatchers.IO) {
     runCatching {
-        URL(DEVELOPER_QQ_AVATAR_URL).openStream().use { input ->
+        val connection = URL(DEVELOPER_QQ_AVATAR_URL).openConnection()
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 ImageForge")
+        connection.connectTimeout = 8000
+        connection.readTimeout = 8000
+        connection.getInputStream().use { input ->
             BitmapFactory.decodeStream(input)
         }
     }.getOrNull()
 }
 
 private fun openDeveloperQQ(context: Context) {
-    val qqIntent = Intent(
+    val qqCardIntent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("mqqwpa://im/chat?chat_type=wpa&uin=$DEVELOPER_QQ")
+        Uri.parse("mqqapi://card/show_pslcard?src_type=internal&version=1&uin=$DEVELOPER_QQ&card_type=person&source=qrcode")
+    ).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val qqCardFallbackIntent = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("mqq://card/show_pslcard?src_type=internal&version=1&uin=$DEVELOPER_QQ&card_type=person&source=qrcode")
     ).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     val webIntent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("https://wpa.qq.com/msgrd?v=3&uin=$DEVELOPER_QQ&site=qq&menu=yes")
+        Uri.parse("https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&authKey=&uin=$DEVELOPER_QQ")
     ).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     runCatching {
-        context.startActivity(qqIntent)
+        context.startActivity(qqCardIntent)
     }.getOrElse {
-        runCatching { context.startActivity(webIntent) }
+        runCatching {
+            context.startActivity(qqCardFallbackIntent)
+        }.getOrElse {
+            runCatching { context.startActivity(webIntent) }
+        }
     }
 }
+
+private fun openImageForgeRepository(context: Context) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(IMAGEFORGE_REPO_URL)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(intent) }
+}
+
 
 class MainActivity : ComponentActivity() {
     private val activityTaskScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -834,6 +856,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     SectionTitle("结果预览", "生成完成后可查看或手动下载到相册")
+                                    StatusCard("默认保存路径：系统相册 / Pictures/ImageForge")
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1356,7 +1379,7 @@ private fun SettingsScreen(
 
                     HorizontalDivider(color = DividerDefaults.color.copy(alpha = 0.55f))
 
-                    SectionTitle("软件信息", "版本、作者和保存位置")
+                    SectionTitle("软件信息", "版本、作者和开源仓库")
 
                     val developerAvatar by produceState<Bitmap?>(initialValue = null) {
                         value = loadDeveloperAvatarBitmap()
@@ -1417,12 +1440,12 @@ private fun SettingsScreen(
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Text(
-                                        text = "$DEVELOPER_QQ · 点击直达 QQ",
+                                        text = "$DEVELOPER_QQ · 点击打开 QQ 名片",
                                         color = Color(0xFF6B7280),
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
-                                        text = "头像来自 QQ 高清头像接口",
+                                        text = "头像来自 QQ 头像接口，点击查看名片资料",
                                         color = Color(0xFF9CA3AF),
                                         style = MaterialTheme.typography.bodySmall
                                     )
@@ -1462,16 +1485,44 @@ private fun SettingsScreen(
                                 color = Color(0xFF6B7280),
                                 style = MaterialTheme.typography.bodySmall
                             )
-                            Text(
-                                text = "默认保存目录：Pictures/ImageForge",
-                                color = Color(0xFF6B7280),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "开源仓库：$IMAGEFORGE_REPO_URL",
-                                color = Color(0xFF6B7280),
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable { openImageForgeRepository(context) },
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                shape = RoundedCornerShape(14.dp),
+                                tonalElevation = 0.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "开源仓库",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            text = IMAGEFORGE_REPO_URL,
+                                            color = Color(0xFF6B7280),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Text(
+                                        text = "›",
+                                        fontSize = 24.sp,
+                                        color = accent,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
