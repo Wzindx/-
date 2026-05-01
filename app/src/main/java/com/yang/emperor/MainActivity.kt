@@ -111,6 +111,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.cancel
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val activityTaskScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
