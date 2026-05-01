@@ -109,10 +109,12 @@ jobs:
       - name: Run Android Lint
         shell: bash
         run: |
+          mkdir -p ci-logs
           set +e
-          "$GRADLE_CMD" :app:lintDebug --no-daemon --stacktrace
-          LINT_EXIT_CODE=$?
+          "$GRADLE_CMD" :app:lintDebug --no-daemon --stacktrace 2>&1 | tee ci-logs/lintDebug.log
+          LINT_EXIT_CODE=${PIPESTATUS[0]}
           echo "LINT_EXIT_CODE=$LINT_EXIT_CODE" >> "$GITHUB_ENV"
+          echo "Android Lint exit code: $LINT_EXIT_CODE"
           exit 0
 
       - name: Publish Lint Diagnostics
@@ -122,8 +124,13 @@ jobs:
           set -euo pipefail
 
           echo "Lint exit code: ${LINT_EXIT_CODE:-unset}"
-          echo "Available reports:"
-          find app/build/reports -maxdepth 4 -type f -print 2>/dev/null || true
+          echo "Available reports and logs:"
+          find app/build/reports ci-logs -maxdepth 5 -type f -print 2>/dev/null || true
+
+          if [ -f ci-logs/lintDebug.log ]; then
+            echo "----- ci-logs/lintDebug.log tail -----"
+            tail -n 220 ci-logs/lintDebug.log || true
+          fi
 
           if [ -f app/build/reports/lint-results-debug.txt ]; then
             echo "----- lint-results-debug.txt -----"
@@ -132,9 +139,7 @@ jobs:
 
           if [ -f app/build/reports/lint-results-debug.xml ]; then
             python3 - <<'PY'
-          import html
           import os
-          import sys
           import xml.etree.ElementTree as ET
 
           report = "app/build/reports/lint-results-debug.xml"
@@ -150,6 +155,7 @@ jobs:
               message = issue.attrib.get("message", "")
               explanation = issue.attrib.get("explanation", "")
               loc = issue.find("location")
+
               if loc is None:
                   print(f"::error title={esc(issue_id)}::{esc(message)}")
                   count += 1
@@ -172,6 +178,46 @@ jobs:
 
           print(f"Published {count} Android lint annotation(s).")
           PY
+          elif [ -f ci-logs/lintDebug.log ]; then
+            python3 - <<'PY'
+          import pathlib
+
+          log_path = pathlib.Path("ci-logs/lintDebug.log")
+          text = log_path.read_text(errors="replace")
+          lines = text.splitlines()
+
+          def esc(value: str) -> str:
+              return str(value or "").replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A").replace(":", "%3A").replace(",", "%2C")
+
+          interesting = []
+          keys = [
+              "FAILURE:",
+              "Execution failed",
+              "What went wrong:",
+              "SDK location not found",
+              "Could not",
+              "Exception",
+              "BUILD FAILED",
+              "error:",
+              "Error:"
+          ]
+
+          for i, line in enumerate(lines):
+              if any(k in line for k in keys):
+                  start = max(0, i - 4)
+                  end = min(len(lines), i + 12)
+                  block = "\n".join(lines[start:end])
+                  if block not in interesting:
+                      interesting.append(block)
+
+          if not interesting:
+              interesting.append("\n".join(lines[-120:]))
+
+          for idx, block in enumerate(interesting[:8], start=1):
+              print(f"::error file=ci-logs/lintDebug.log,line=1,title=Android Lint Console Failure {idx}::{esc(block)}")
+
+          print(f"Published {min(len(interesting), 8)} console diagnostic annotation(s).")
+          PY
           fi
 
       - name: Upload Lint Reports
@@ -180,6 +226,7 @@ jobs:
         with:
           name: android-lint-reports
           path: |
+            ci-logs/*.log
             app/build/reports/lint-results-debug.*
             app/build/reports/lint-results-debug/
             app/build/reports/lint/
