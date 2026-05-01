@@ -146,6 +146,7 @@ gradle :app:assembleRelease
 
 ```text
 app/src/main/java/com/yang/emperor/MainActivity.kt
+app/src/main/java/com/yang/emperor/MainUiComponents.kt
 app/src/main/java/com/yang/emperor/ui/theme/
 .github/workflows/android.yml
 .github/workflows/release.yml

@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish to, e.g. v1.9"
+        description: "Release tag to publish to, e.g. v2.0. Leave empty to use app versionName."
         required: false
         type: string
-        default: "v1.9"
+        default: ""
 
 concurrency:
   group: android-release-${{ github.event.workflow_run.head_branch || github.ref_name }}
@@ -158,31 +158,43 @@ jobs:
           set -euo pipefail
 
           BODY_FILE="$RUNNER_TEMP/release-body.md"
-          cat > "$BODY_FILE" <<'BODY'
-          # UniversalImageStudio v1.9
+          cat > "$BODY_FILE" <<BODY
+          # UniversalImageStudio $TAG_NAME
 
-          本版本聚焦于图像生成体验、引导流程稳定性、移动端交互性能和自动发布链路。
+          本版本是 UniversalImageStudio 的 2.0 最终优化版，重点完成界面架构拆分、移动端交互整理、构建发布链路稳定化，并保持图像生成主流程可直接使用。
+
+          ## 2.0 优化重点
+
+          - 将 `MainActivity.kt` 中的通用 UI 组件拆分到 `MainUiComponents.kt`，降低主 Activity 体积和维护成本。
+          - 保留文生图、参考图编辑、后台任务、历史记录、保存、分享和通知等核心能力。
+          - 优化移动端界面组织方式，继续使用底部面板承载配置项，减少首页长期配置噪音。
+          - 保持参考图按需读取与压缩策略，减少从系统相册返回应用时的卡顿。
+          - 保持首次引导和设置页重新引导入口，方便用户重新配置接口信息。
+          - 完整验证 Gradle Wrapper、Android Lint、Debug APK、Release APK 与自动发布链路。
+          - Release 页面现在会根据版本动态生成说明，避免后续版本继续复用旧版文案。
 
           ## 主要能力
 
-          - 支持文本生成图片与参考图编辑两种创作方式。
-          - 支持 OpenAI 兼容图像接口配置，可自定义接口、模型、尺寸、质量与格式。
-          - 支持后台生成任务、生成完成通知、历史记录查看与图片分享。
-          - 支持首次使用引导和设置页重新打开引导，便于重新查看使用说明。
-
-          ## 当前修复重点
-
-          - 修复引导页状态复用导致的异常跳页问题。
-          - 优化参考图读取时机，减少图片选择后的卡顿。
-          - 优化 Android 图片保存、通知、分享和历史记录体验。
-          - 完整补齐 Gradle Wrapper 和 CI 构建链路。
+          - 文本生成图片。
+          - 参考图 / 图生图编辑。
+          - OpenAI 兼容图像接口配置。
+          - 自定义 Base URL、API Key、接口模式、模型、尺寸、质量、格式和生成数量。
+          - 后台生成任务、完成通知、历史记录查看、图片保存与分享。
+          - 移动端优先的参数选择和引导体验。
 
           ## 下载
 
           下载下方 `app-release.apk` 安装即可。
 
           - 包名：`com.yang.emperor`
+          - 版本：`$VERSION_NAME`
           - 文件：`app-release.apk`
+
+          ## 验证状态
+
+          - Android Lint：通过 CI 执行。
+          - Debug APK：通过 CI 构建。
+          - Release APK：通过 CI 构建并自动上传到 GitHub Release。
           BODY
 
           git tag -f "$TAG_NAME" "$RELEASE_SHA"
