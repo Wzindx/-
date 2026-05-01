@@ -324,11 +324,11 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
                 },
                 onSave = {
-                    prefs.edit()
-                        .putString("baseUrl", baseUrl.trim())
-                        .putString("apiKey", apiKey.trim())
-                        .putBoolean("onboardingDone", true)
-                        .apply()
+                    prefs.edit {
+                        putString("baseUrl", baseUrl.trim())
+                        putString("apiKey", apiKey.trim())
+                        putBoolean("onboardingDone", true)
+                    }
                     settingsNotice = "接口信息已保存。"
                     status = ""
                     showOnboarding = false
@@ -427,12 +427,12 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             )
             Button(
                 onClick = {
-                    prefs.edit()
-                        .putString("apiMode", apiMode.value)
-                        .putString("generateModel", generateModel.trim())
-                        .putString("editModel", editModel.trim())
-                        .putString("model", generateModel.trim())
-                        .apply()
+                    prefs.edit {
+                        putString("apiMode", apiMode.value)
+                        putString("generateModel", generateModel.trim())
+                        putString("editModel", editModel.trim())
+                        putString("model", generateModel.trim())
+                    }
                     status = "接口与模型已保存。"
                     showModelSheet = false
                 },
@@ -552,15 +552,15 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 showOnboarding = true
             },
             onSave = {
-                prefs.edit()
-                    .putString("baseUrl", baseUrl.trim())
-                    .putString("apiKey", apiKey.trim())
-                    .putString("apiMode", apiMode.value)
-                    .putString("generateModel", generateModel.trim())
-                    .putString("editModel", editModel.trim())
-                    .putString("model", generateModel.trim())
-                    .putBoolean("onboardingDone", true)
-                    .apply()
+                prefs.edit {
+                    putString("baseUrl", baseUrl.trim())
+                    putString("apiKey", apiKey.trim())
+                    putString("apiMode", apiMode.value)
+                    putString("generateModel", generateModel.trim())
+                    putString("editModel", editModel.trim())
+                    putString("model", generateModel.trim())
+                    putBoolean("onboardingDone", true)
+                }
                 settingsNotice = "接口设置已保存。"
                 status = ""
                 currentRoute = ScreenRoute.MAIN
