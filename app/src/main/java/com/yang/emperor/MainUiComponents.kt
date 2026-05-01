@@ -593,6 +593,7 @@ fun HistoryCard(
     onLongPress: () -> Unit = {},
     onDelete: () -> Unit = {},
     onCopyError: () -> Unit = {},
+    onPreview: () -> Unit = {},
     onShare: () -> Unit
 ) {
     val borderColor = if (selected) accent else Color.Transparent
@@ -607,7 +608,11 @@ fun HistoryCard(
             .border(BorderStroke(if (selected) 2.dp else 0.dp, borderColor), RoundedCornerShape(28.dp))
             .combinedClickable(
                 onClick = {
-                    if (selectionMode) onToggleSelected()
+                    if (selectionMode) {
+                        onToggleSelected()
+                    } else {
+                        onPreview()
+                    }
                 },
                 onLongClick = onLongPress
             )
@@ -692,9 +697,9 @@ fun HistoryCard(
                             }
                         }
                     }
-                } else {
+                } else if (item.prompt.isNotBlank()) {
                     Text(
-                        text = "保存地址：${item.path}",
+                        text = item.prompt,
                         color = Color(0xFF4B5563),
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 2,
