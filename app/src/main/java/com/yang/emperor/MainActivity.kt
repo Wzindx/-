@@ -105,6 +105,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.focus.FocusRequester
@@ -129,16 +130,21 @@ private const val DEVELOPER_QQ_AVATAR_URL = "https://q1.qlogo.cn/g?b=qq&nk=$DEVE
 private const val IMAGEFORGE_REPO_URL = "https://github.com/Wzindx/ImageForge"
 private const val IMAGEFORGE_VERSION_NAME = "2.1"
 
-private suspend fun loadDeveloperAvatarBitmap(): Bitmap? = withContext(Dispatchers.IO) {
-    runCatching {
-        val connection = URL(DEVELOPER_QQ_AVATAR_URL).openConnection()
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 ImageForge")
-        connection.connectTimeout = 8000
-        connection.readTimeout = 8000
-        connection.getInputStream().use { input ->
-            BitmapFactory.decodeStream(input)
-        }
-    }.getOrNull()
+private var developerAvatarCache: Bitmap? = null
+
+private suspend fun loadDeveloperAvatarBitmap(): Bitmap? {
+    developerAvatarCache?.let { return it }
+    return withContext(Dispatchers.IO) {
+        runCatching {
+            val connection = URL(DEVELOPER_QQ_AVATAR_URL).openConnection()
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 ImageForge")
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+            connection.getInputStream().use { input ->
+                BitmapFactory.decodeStream(input)
+            }
+        }.getOrNull()?.also { developerAvatarCache = it }
+    }
 }
 
 private fun openDeveloperQQ(context: Context) {
@@ -215,29 +221,7 @@ private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
         }
     }
 
-    return buildString {
-        appendLine(reason)
-        appendLine()
-        appendLine("任务信息：")
-        appendLine("- 模式：${if (task.mode == "edit") "图生图 / 编辑" else "文生图"}")
-        appendLine("- 模型：${task.model}")
-        appendLine("- 接口模式：${task.apiMode.label}")
-        appendLine("- 尺寸：${task.size}")
-        appendLine("- 画质：${task.quality}")
-        appendLine("- Base URL：${task.baseUrl}")
-        appendLine()
-        appendLine("建议处理：")
-        appendLine("1. 检查网络或代理是否稳定。")
-        appendLine("2. 如果是 timeout，可稍后重试或换响应更快的模型。")
-        appendLine("3. 检查 Base URL 是否与当前接口模式匹配。")
-        appendLine("4. 检查 API Key、余额、模型权限和服务端限流。")
-        appendLine()
-        appendLine("原始异常：")
-        appendLine("$rootName: $rootMessage")
-        appendLine()
-        appendLine("堆栈摘要：")
-        append(raw.take(1800))
-    }.trim()
+    return reason
 }
 
 
@@ -294,6 +278,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var previewPrompt by remember { mutableStateOf("") }
     var previewSavedPath by remember { mutableStateOf("") }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
+    var previewHistoryItem by remember { mutableStateOf(null as HistoryItem?) }
     val selectedHistoryKeys = remember { mutableStateListOf<String>() }
     var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
     val shouldShowInitialOnboarding = remember {
@@ -304,7 +289,11 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var onboardingSessionId by remember { mutableLongStateOf(0L) }
     val runningTasks = remember { mutableStateListOf<String>() }
 
-    BackHandler(enabled = currentRoute != ScreenRoute.MAIN && !showOnboarding) {
+    BackHandler(enabled = !showOnboarding && selectedHistoryKeys.isNotEmpty()) {
+        selectedHistoryKeys.clear()
+    }
+
+    BackHandler(enabled = currentRoute != ScreenRoute.MAIN && !showOnboarding && selectedHistoryKeys.isEmpty()) {
         currentRoute = ScreenRoute.MAIN
     }
 
@@ -1165,7 +1154,11 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         shadowElevation = 8.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("🗑", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "删除选中记录",
+                                tint = Color.White
+                            )
                         }
                     }
                 }
