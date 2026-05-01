@@ -574,6 +574,41 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         }
     }
 
+    previewHistoryItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = { previewHistoryItem = null },
+            title = { Text("图片记录详情") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("模型：${item.model}", fontWeight = FontWeight.Bold)
+                    Text("类型：${if (item.mode == "edit") "图生图 / 编辑" else "文生图"}")
+                    Text("时间：${item.time}")
+                    Text("状态：${when (item.state) { "running" -> "处理中"; "failed" -> "处理失败"; else -> "处理成功" }}")
+                    if (item.prompt.isNotBlank()) {
+                        Text("提示词：", fontWeight = FontWeight.Bold)
+                        Text(item.prompt, color = Color(0xFF4B5563))
+                    }
+                    if (item.error.isNotBlank()) {
+                        Text("错误：${item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error}", color = Color(0xFFE11D48))
+                    } else {
+                        Text("保存路径：${item.path}", color = Color(0xFF6B7280))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { previewHistoryItem = null }) { Text("关闭") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    copyTextToClipboard(context, "ImageForge Prompt", item.prompt)
+                }) {
+                    Text("复制提示词")
+                }
+            },
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+
     if (showParamsSheet) {
         AppBottomSheetPanel(
             title = "生成参数",
@@ -1113,6 +1148,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 copyTextToClipboard(context, "ImageForge Error", item.error)
                                 status = "错误详情已复制。"
                             },
+                            onPreview = { previewHistoryItem = item },
                             onShare = { shareImageFromHistory(context, item.path) }
                         )
                     }
@@ -1536,6 +1572,40 @@ private fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("保存连接设置")
+                    }
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        shape = RoundedCornerShape(18.dp),
+                        tonalElevation = 1.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "图片保存路径",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = "系统相册 / Pictures/ImageForge",
+                                    color = Color(0xFF6B7280),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Text(
+                                text = "›",
+                                fontSize = 28.sp,
+                                color = accent,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
                     TextButton(
