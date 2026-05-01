@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish to, e.g. v2.0. Leave empty to use app versionName."
+        description: "Release tag to publish to, e.g. v2.1. Leave empty to use app versionName."
         required: false
         type: string
         default: ""
@@ -164,17 +164,17 @@ jobs:
           cat > "$BODY_FILE" <<'BODY'
           # ImageForge __TAG_NAME__
 
-          本版本是 ImageForge 的 2.0 最终优化版，重点完成界面架构拆分、移动端交互整理、构建发布链路稳定化，并保持图像生成主流程可直接使用。
+          本版本是 ImageForge v2.1 精修版，重点完善历史记录交互、后台生成、错误诊断、保存路径管理、权限引导与自动构建发布链路。
 
-          ## 2.0 优化重点
+          ## v2.1 优化重点
 
-          - 将 `MainActivity.kt` 中的通用 UI 组件拆分到 `MainUiComponents.kt`，降低主 Activity 体积和维护成本。
-          - 保留文生图、参考图编辑、后台任务、历史记录、保存、分享和通知等核心能力。
-          - 优化移动端界面组织方式，继续使用底部面板承载配置项，减少首页长期配置噪音。
-          - 保持参考图按需读取与压缩策略，减少从系统相册返回应用时的卡顿。
-          - 保持首次引导和设置页重新引导入口，方便用户重新配置接口信息。
+          - 历史记录外层仅展示模型、处理状态、时间和图片方式，不再暴露提示词和保存路径。
+          - 删除入口收敛为长按删除，避免误触和界面冗余。
+          - 生成任务使用进程级后台协程，只要应用未被系统或用户划掉即可继续处理。
+          - 错误提示优先保留 HTTP 状态码、响应体和完整异常，便于定位 401、403、429、500、503 等问题。
+          - 图片保存路径支持系统目录选择和授权，默认仍兼容系统相册 / Pictures/ImageForge。
+          - 补强通知权限与保存目录权限引导，完成生成后可通过通知进入结果。
           - 完整验证 Gradle Wrapper、Android Lint、Debug APK、Release APK 与自动发布链路。
-          - Release 页面现在会根据版本动态生成说明，避免后续版本继续复用旧版文案。
 
           ## 主要能力
 
