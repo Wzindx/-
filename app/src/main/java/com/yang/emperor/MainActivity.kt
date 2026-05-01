@@ -2,6 +2,8 @@ package com.yang.emperor
 
 import android.Manifest
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -10,6 +12,7 @@ import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -115,9 +118,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.cancel
 import java.util.UUID
 import java.net.URL
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import java.io.IOException
 
 private const val DEVELOPER_QQ = "2753761311"
 private const val DEVELOPER_QQ_AVATAR_URL = "https://q1.qlogo.cn/g?b=qq&nk=$DEVELOPER_QQ&s=640"
@@ -175,13 +180,69 @@ private fun openImageForgeRepository(context: Context) {
 }
 
 
-class MainActivity : ComponentActivity() {
-    private val activityTaskScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+private object ImageForgeBackgroundRunner {
+    val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+}
 
-    override fun onDestroy() {
-        activityTaskScope.cancel()
-        super.onDestroy()
+private fun copyTextToClipboard(context: Context, label: String, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+    Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+}
+
+private fun compactErrorMessage(message: String): String {
+    return message.lines().firstOrNull { it.isNotBlank() }?.take(140) ?: "未知错误"
+}
+
+private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
+    val raw = e.stackTraceToString()
+    val root = generateSequence(e as Throwable?) { it.cause }.lastOrNull()
+    val rootName = root?.javaClass?.simpleName ?: e.javaClass.simpleName
+    val rootMessage = root?.message ?: e.message ?: "无详细异常消息"
+
+    val reason = when (root) {
+        is SocketTimeoutException -> "请求超时：接口在限定时间内没有返回结果。"
+        is UnknownHostException -> "网络解析失败：无法解析 Base URL 的域名。"
+        is IOException -> "网络请求失败：连接被中断、服务端无响应或当前网络不可用。"
+        else -> when {
+            rootMessage.contains("timeout", ignoreCase = true) -> "请求超时：模型生成耗时较长或服务端排队。"
+            rootMessage.contains("401") -> "认证失败：API Key 可能无效或权限不足。"
+            rootMessage.contains("403") -> "请求被拒绝：账号、模型或接口权限可能不足。"
+            rootMessage.contains("404") -> "接口不存在：Base URL、接口模式或模型路径可能不匹配。"
+            rootMessage.contains("429") -> "请求过多：服务端限流或额度不足。"
+            rootMessage.contains("500") || rootMessage.contains("502") || rootMessage.contains("503") -> "服务端错误：图像服务暂时不可用。"
+            else -> "生成失败：接口返回异常或请求处理失败。"
+        }
     }
+
+    return buildString {
+        appendLine(reason)
+        appendLine()
+        appendLine("任务信息：")
+        appendLine("- 模式：${if (task.mode == "edit") "图生图 / 编辑" else "文生图"}")
+        appendLine("- 模型：${task.model}")
+        appendLine("- 接口模式：${task.apiMode.label}")
+        appendLine("- 尺寸：${task.size}")
+        appendLine("- 画质：${task.quality}")
+        appendLine("- Base URL：${task.baseUrl}")
+        appendLine()
+        appendLine("建议处理：")
+        appendLine("1. 检查网络或代理是否稳定。")
+        appendLine("2. 如果是 timeout，可稍后重试或换响应更快的模型。")
+        appendLine("3. 检查 Base URL 是否与当前接口模式匹配。")
+        appendLine("4. 检查 API Key、余额、模型权限和服务端限流。")
+        appendLine()
+        appendLine("原始异常：")
+        appendLine("$rootName: $rootMessage")
+        appendLine()
+        appendLine("堆栈摘要：")
+        append(raw.take(1800))
+    }.trim()
+}
+
+
+class MainActivity : ComponentActivity() {
+    private val activityTaskScope = ImageForgeBackgroundRunner.scope
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -230,7 +291,10 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var status by remember { mutableStateOf("") }
     var settingsNotice by remember { mutableStateOf("") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
+    var previewPrompt by remember { mutableStateOf("") }
+    var previewSavedPath by remember { mutableStateOf("") }
     var history by remember { mutableStateOf(loadHistory(prefs)) }
+    val selectedHistoryKeys = remember { mutableStateListOf<String>() }
     var showAdvancedOptions by rememberSaveable { mutableStateOf(false) }
     val shouldShowInitialOnboarding = remember {
         !prefs.getBoolean("onboardingDone", false) && (apiKey.isBlank() || baseUrl.isBlank())
@@ -268,6 +332,13 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         if (settingsNotice.isNotBlank()) {
             delay(5000)
             settingsNotice = ""
+        }
+    }
+
+    LaunchedEffect(status) {
+        if (status.isNotBlank()) {
+            delay(5000)
+            status = ""
         }
     }
 
@@ -348,9 +419,11 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     }
                 }
                 imageBytes = result
+                previewPrompt = task.prompt
                 val savedUri = runCatching {
                     saveToGallery(context, result, task.outputFormat)
                 }.getOrElse { "未下载" }
+                previewSavedPath = savedUri
 
                 history = history.map {
                     if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
@@ -365,13 +438,14 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 }
                 notifyImageReady(context, savedUri)
             } catch (e: Exception) {
+                val detailedError = detailedTaskErrorMessage(e, task)
                 history = history.map {
                     if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
-                        it.copy(path = "失败", state = "failed", error = e.message ?: "未知错误")
+                        it.copy(path = "失败", state = "failed", error = detailedError)
                     } else it
                 }
                 saveHistory(prefs, history)
-                status = "后台任务失败：${e.message}"
+                status = "后台任务失败：${compactErrorMessage(detailedError)}"
             } finally {
                 runningTasks.remove(task.id)
             }
@@ -501,7 +575,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         putString("editModel", editModel.trim())
                         putString("model", generateModel.trim())
                     }
-                    status = "接口与模型已保存。"
+                    status = "接口与模型已保存，将用于下一次生成。"
                     showModelSheet = false
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -816,7 +890,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                             background = background
                                         )
                                         startBackgroundTask(task)
-                                        status = "已开始后台生成，可继续创建新任务。"
+                                        status = "已提交后台生成任务，可继续创建新任务。"
                                         currentRoute = ScreenRoute.HISTORY
                                     }
                                 },
@@ -862,8 +936,34 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     modifier = Modifier.padding(18.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    SectionTitle("结果预览", "生成完成后可查看或手动下载到相册")
+                                    SectionTitle("结果预览", "图片、提示词、保存、分享和关闭都集中在这里")
                                     StatusCard("默认保存路径：系统相册 / Pictures/ImageForge")
+                                    if (previewPrompt.isNotBlank()) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                            shape = RoundedCornerShape(16.dp),
+                                            tonalElevation = 0.dp
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(14.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text("提示词", fontWeight = FontWeight.Bold)
+                                                Text(
+                                                    text = previewPrompt,
+                                                    color = Color(0xFF4B5563),
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                TextButton(onClick = {
+                                                    copyTextToClipboard(context, "ImageForge Prompt", previewPrompt)
+                                                    status = "提示词已复制。"
+                                                }) {
+                                                    Text("复制提示词")
+                                                }
+                                            }
+                                        }
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -882,24 +982,42 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        TextButton(
-                                            onClick = {
-                                                status = "结果已显示在预览区。"
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text("查看")
-                                        }
                                         Button(
                                             onClick = {
                                                 val saved = saveToGallery(context, bytes, outputFormat)
-                                                status = "已下载到相册：$saved"
+                                                previewSavedPath = saved
+                                                status = "已保存到相册：$saved"
                                             },
                                             modifier = Modifier.weight(1f)
                                         ) {
-                                            Text("下载")
+                                            Text("保存")
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                val pathForShare = if (previewSavedPath.startsWith("content://")) {
+                                                    previewSavedPath
+                                                } else {
+                                                    saveToGallery(context, bytes, outputFormat).also { previewSavedPath = it }
+                                                }
+                                                shareImageFromHistory(context, pathForShare)
+                                                status = "已打开系统分享。"
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("分享")
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                imageBytes = null
+                                                previewPrompt = ""
+                                                previewSavedPath = ""
+                                                status = "已关闭结果预览。"
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("关闭")
                                         }
                                     }
                                 }
@@ -942,12 +1060,29 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             Text("历史记录", fontSize = 26.sp, fontWeight = FontWeight.Bold)
                             Text("最近生成与编辑结果", color = Color(0xFF6B7280))
                         }
-                        TextButton(onClick = {
-                            history = emptyList()
-                            saveHistory(prefs, history)
-                            status = "历史记录已清空。"
-                        }) {
-                            Text("清空")
+                        if (selectedHistoryKeys.isNotEmpty()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TextButton(onClick = {
+                                    selectedHistoryKeys.clear()
+                                }) { Text("取消") }
+                                TextButton(onClick = {
+                                    selectedHistoryKeys.clear()
+                                    selectedHistoryKeys.addAll(history.map { "${it.time}|${it.prompt}" })
+                                }) { Text("全选") }
+                                TextButton(onClick = {
+                                    val keys = selectedHistoryKeys.toSet()
+                                    history = history.filterNot { "${it.time}|${it.prompt}" in keys }
+                                    saveHistory(prefs, history)
+                                    selectedHistoryKeys.clear()
+                                    status = "已删除选中的历史记录。"
+                                }) { Text("删除") }
+                            }
+                        } else {
+                            Text(
+                                text = "长按选择",
+                                color = Color(0xFF6B7280),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
                 }
@@ -982,8 +1117,33 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     }
                 } else {
                     items(history.take(30)) { item ->
+                        val itemKey = "${item.time}|${item.prompt}"
                         HistoryCard(
                             item = item,
+                            selectionMode = selectedHistoryKeys.isNotEmpty(),
+                            selected = itemKey in selectedHistoryKeys,
+                            onToggleSelected = {
+                                if (itemKey in selectedHistoryKeys) {
+                                    selectedHistoryKeys.remove(itemKey)
+                                } else {
+                                    selectedHistoryKeys.add(itemKey)
+                                }
+                            },
+                            onLongPress = {
+                                if (itemKey !in selectedHistoryKeys) {
+                                    selectedHistoryKeys.add(itemKey)
+                                }
+                            },
+                            onDelete = {
+                                history = history.filterNot { it.time == item.time && it.prompt == item.prompt }
+                                saveHistory(prefs, history)
+                                selectedHistoryKeys.remove(itemKey)
+                                status = "已删除该条历史记录。"
+                            },
+                            onCopyError = {
+                                copyTextToClipboard(context, "ImageForge Error", item.error)
+                                status = "错误详情已复制。"
+                            },
                             onShare = { shareImageFromHistory(context, item.path) }
                         )
                     }
