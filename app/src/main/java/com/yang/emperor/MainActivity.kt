@@ -201,27 +201,46 @@ private fun compactErrorMessage(message: String): String {
 }
 
 private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
-    val raw = e.stackTraceToString()
-    val root = generateSequence(e as Throwable?) { it.cause }.lastOrNull()
-    val rootName = root?.javaClass?.simpleName ?: e.javaClass.simpleName
-    val rootMessage = root?.message ?: e.message ?: "无详细异常消息"
+    val rawStack = e.stackTraceToString()
+    val chain = generateSequence(e as Throwable?) { it.cause }.toList()
+    val root = chain.lastOrNull() ?: e
+    val rootName = root.javaClass.simpleName
+    val rootMessage = root.message.orEmpty().ifBlank { e.message.orEmpty() }
 
-    val reason = when (root) {
-        is SocketTimeoutException -> "请求超时：接口在限定时间内没有返回结果。"
-        is UnknownHostException -> "网络解析失败：无法解析 Base URL 的域名。"
-        is IOException -> "网络请求失败：连接被中断、服务端无响应或当前网络不可用。"
-        else -> when {
-            rootMessage.contains("timeout", ignoreCase = true) -> "请求超时：模型生成耗时较长或服务端排队。"
-            rootMessage.contains("401") -> "认证失败：API Key 可能无效或权限不足。"
-            rootMessage.contains("403") -> "请求被拒绝：账号、模型或接口权限可能不足。"
-            rootMessage.contains("404") -> "接口不存在：Base URL、接口模式或模型路径可能不匹配。"
-            rootMessage.contains("429") -> "请求过多：服务端限流或额度不足。"
-            rootMessage.contains("500") || rootMessage.contains("502") || rootMessage.contains("503") -> "服务端错误：图像服务暂时不可用。"
-            else -> "生成失败：接口返回异常或请求处理失败。"
+    val searchable = (listOf(rootMessage, e.message.orEmpty(), rawStack) + chain.map { it.message.orEmpty() })
+        .joinToString("\n")
+
+    val httpCode = Regex("""\b(401|403|404|408|409|422|429|500|502|503|504)\b""")
+        .find(searchable)
+        ?.value
+
+    if (httpCode != null) {
+        val meaning = when (httpCode) {
+            "401" -> "认证失败，API Key 无效、缺失或权限不足"
+            "403" -> "请求被拒绝，账号、模型或接口权限不足"
+            "404" -> "接口不存在，Base URL、接口模式或模型路径不匹配"
+            "408" -> "请求超时，服务端未在限定时间内返回"
+            "409" -> "请求冲突，服务端拒绝当前任务状态"
+            "422" -> "请求参数无法处理，模型、尺寸、格式或提示词可能不被支持"
+            "429" -> "请求过多或额度不足，服务端限流"
+            "500" -> "服务端内部错误"
+            "502" -> "网关错误，上游服务异常"
+            "503" -> "服务端暂时不可用或正在维护"
+            "504" -> "网关超时，上游服务响应过慢"
+            else -> "HTTP 错误"
         }
+        val body = rootMessage.ifBlank { rawStack.lines().firstOrNull { it.isNotBlank() }.orEmpty() }
+        return "HTTP $httpCode：$meaning\n$body\n\n$rawStack"
     }
 
-    return reason
+    val networkHint = when (root) {
+        is SocketTimeoutException -> "SocketTimeoutException：请求超时，接口在限定时间内没有返回结果。"
+        is UnknownHostException -> "UnknownHostException：无法解析 Base URL 的域名，请检查地址或网络。"
+        is IOException -> "IOException：${rootMessage.ifBlank { "网络或文件读写异常" }}"
+        else -> "$rootName：${rootMessage.ifBlank { "无详细异常消息" }}"
+    }
+
+    return "$networkHint\n\n$rawStack"
 }
 
 
@@ -288,6 +307,13 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var onboardingReturnRoute by remember { mutableStateOf(ScreenRoute.MAIN.name) }
     var onboardingSessionId by remember { mutableLongStateOf(0L) }
     val runningTasks = remember { mutableStateListOf<String>() }
+    var customSaveDirectoryUriString by rememberSaveable { mutableStateOf(prefs.getString("customSaveDirectoryUri", "") ?: "") }
+    val customSaveDirectoryUri = customSaveDirectoryUriString.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+    val saveDirectoryLabel = if (customSaveDirectoryUriString.isNotBlank()) {
+        "自定义目录：$customSaveDirectoryUriString"
+    } else {
+        "系统相册 / Pictures/ImageForge"
+    }
 
     BackHandler(enabled = !showOnboarding && selectedHistoryKeys.isNotEmpty()) {
         selectedHistoryKeys.clear()
@@ -303,6 +329,21 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
+
+    val saveDirectoryPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            }
+            customSaveDirectoryUriString = uri.toString()
+            prefs.edit { putString("customSaveDirectoryUri", customSaveDirectoryUriString) }
+            settingsNotice = "图片保存路径已更新。"
+            status = "图片保存路径已更新。"
+        }
+    }
 
     val currentSizes = if (editMode) editSizes else generationSizes
     val selectedSizeOption = currentSizes.firstOrNull { it.value == size } ?: currentSizes.first()
@@ -410,7 +451,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 imageBytes = result
                 previewPrompt = task.prompt
                 val savedUri = runCatching {
-                    saveToGallery(context, result, task.outputFormat)
+                    saveToGallery(context, result, task.outputFormat, customSaveDirectoryUri)
                 }.getOrElse { "未下载" }
                 previewSavedPath = savedUri
 
@@ -696,6 +737,10 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 editModel = it
                 customEditModel = it
             },
+            saveDirectoryLabel = saveDirectoryLabel,
+            onChooseSaveDirectory = {
+                saveDirectoryPicker.launch(null)
+            },
             settingsNotice = settingsNotice,
             onBack = { currentRoute = ScreenRoute.MAIN },
             onClearConfig = {
@@ -961,7 +1006,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     SectionTitle("结果预览", "图片、提示词、保存、分享和关闭都集中在这里")
-                                    StatusCard("默认保存路径：系统相册 / Pictures/ImageForge")
+                                    StatusCard("保存路径：$saveDirectoryLabel")
                                     if (previewPrompt.isNotBlank()) {
                                         Surface(
                                             modifier = Modifier.fillMaxWidth(),
@@ -1010,7 +1055,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     ) {
                                         Button(
                                             onClick = {
-                                                val saved = saveToGallery(context, bytes, outputFormat)
+                                                val saved = saveToGallery(context, bytes, outputFormat, customSaveDirectoryUri)
                                                 previewSavedPath = saved
                                                 status = "已保存到相册：$saved"
                                             },
@@ -1023,7 +1068,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                                 val pathForShare = if (previewSavedPath.startsWith("content://")) {
                                                     previewSavedPath
                                                 } else {
-                                                    saveToGallery(context, bytes, outputFormat).also { previewSavedPath = it }
+                                                    saveToGallery(context, bytes, outputFormat, customSaveDirectoryUri).also { previewSavedPath = it }
                                                 }
                                                 shareImageFromHistory(context, pathForShare)
                                                 status = "已打开系统分享。"
@@ -1513,6 +1558,8 @@ private fun SettingsScreen(
     onSelectGenerateModel: (String) -> Unit,
     onCustomEditModelChange: (String) -> Unit,
     onSelectEditModel: (String) -> Unit,
+    saveDirectoryLabel: String,
+    onChooseSaveDirectory: () -> Unit,
     settingsNotice: String,
     onBack: () -> Unit,
     onClearConfig: () -> Unit,
@@ -1575,7 +1622,10 @@ private fun SettingsScreen(
                     }
 
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .clickable { onChooseSaveDirectory() },
                         color = MaterialTheme.colorScheme.surfaceContainerLowest,
                         shape = RoundedCornerShape(18.dp),
                         tonalElevation = 1.dp
@@ -1594,9 +1644,16 @@ private fun SettingsScreen(
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
-                                    text = "系统相册 / Pictures/ImageForge",
+                                    text = saveDirectoryLabel,
                                     color = Color(0xFF6B7280),
-                                    style = MaterialTheme.typography.bodySmall
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "点击选择系统文件管理器目录",
+                                    color = accent,
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             }
                             Text(
