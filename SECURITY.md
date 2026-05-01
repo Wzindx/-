@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security issue in UniversalImageStudio, please report it privately instead of publishing sensitive details in a public Issue, Pull Request, commit message, screenshot, or chat transcript.
+If you discover a security issue in ImageForge, please report it privately instead of publishing sensitive details in a public Issue, Pull Request, commit message, screenshot, or chat transcript.
 
 Recommended report contents:
 
