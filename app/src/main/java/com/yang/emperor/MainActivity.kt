@@ -264,6 +264,13 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         }
     }
 
+    LaunchedEffect(settingsNotice) {
+        if (settingsNotice.isNotBlank()) {
+            delay(5000)
+            settingsNotice = ""
+        }
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedImage = uri
         selectedImageBytes = null
@@ -1440,13 +1447,8 @@ private fun SettingsScreen(
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Text(
-                                        text = "$DEVELOPER_QQ · 点击打开 QQ 名片",
+                                        text = DEVELOPER_QQ,
                                         color = Color(0xFF6B7280),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        text = "头像来自 QQ 头像接口，点击查看名片资料",
-                                        color = Color(0xFF9CA3AF),
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
