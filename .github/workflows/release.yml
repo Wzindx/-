@@ -162,9 +162,9 @@ jobs:
 
           BODY_FILE="$RUNNER_TEMP/release-body.md"
           cat > "$BODY_FILE" <<'BODY'
-          # UniversalImageStudio __TAG_NAME__
+          # ImageForge __TAG_NAME__
 
-          本版本是 UniversalImageStudio 的 2.0 最终优化版，重点完成界面架构拆分、移动端交互整理、构建发布链路稳定化，并保持图像生成主流程可直接使用。
+          本版本是 ImageForge 的 2.0 最终优化版，重点完成界面架构拆分、移动端交互整理、构建发布链路稳定化，并保持图像生成主流程可直接使用。
 
           ## 2.0 优化重点
 
@@ -204,13 +204,13 @@ jobs:
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release edit "$TAG_NAME" \
-              --title "UniversalImageStudio $TAG_NAME" \
+              --title "ImageForge $TAG_NAME" \
               --notes-file "$BODY_FILE" \
               --latest
           else
             gh release create "$TAG_NAME" \
               --target "$RELEASE_SHA" \
-              --title "UniversalImageStudio $TAG_NAME" \
+              --title "ImageForge $TAG_NAME" \
               --notes-file "$BODY_FILE" \
               --latest
           fi
