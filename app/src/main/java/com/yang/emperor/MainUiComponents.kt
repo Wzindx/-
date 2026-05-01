@@ -203,7 +203,7 @@ fun BottomNavigationBar(
                 onClick = { onRouteSelected(ScreenRoute.MAIN) }
             )
             BottomNavButton(
-                text = "历史",
+                text = "记录",
                 selected = currentRoute == ScreenRoute.HISTORY,
                 modifier = Modifier.weight(1f),
                 onClick = { onRouteSelected(ScreenRoute.HISTORY) }
@@ -708,34 +708,36 @@ fun HistoryCard(
                     style = MaterialTheme.typography.bodyMedium
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (item.state == "success" && item.path.startsWith("content://")) {
+                if (!selectionMode) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (item.state == "success" && item.path.startsWith("content://")) {
+                            TextButton(
+                                onClick = onShare,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(Color(0xFFEDE9FE))
+                                    .padding(horizontal = 8.dp)
+                            ) {
+                                Text(
+                                    text = "分享",
+                                    color = Color(0xFF4C1D95),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                         TextButton(
-                            onClick = onShare,
+                            onClick = onDelete,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(22.dp))
-                                .background(Color(0xFFEDE9FE))
+                                .background(Color(0xFFFFE4E6))
                                 .padding(horizontal = 8.dp)
                         ) {
                             Text(
-                                text = "分享",
-                                color = Color(0xFF4C1D95),
+                                text = "删除",
+                                color = Color(0xFFE11D48),
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
-                    }
-                    TextButton(
-                        onClick = onDelete,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Color(0xFFFFE4E6))
-                            .padding(horizontal = 8.dp)
-                    ) {
-                        Text(
-                            text = "删除",
-                            color = Color(0xFFE11D48),
-                            fontWeight = FontWeight.SemiBold
-                        )
                     }
                 }
             }
