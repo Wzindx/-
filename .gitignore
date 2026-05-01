@@ -44,3 +44,11 @@ dist/
 Thumbs.db
 
 # Operit / temporary terminal leftovers
+.operit/
+.operit-cache/
+operit-*.log
+*_audit_report.txt
+*_audit/
+audit-report.txt
+ci-logs/
+lintDebug.log
