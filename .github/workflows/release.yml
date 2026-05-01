@@ -1,8 +1,5 @@
 name: Release Android APK
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 on:
   workflow_run:
     workflows: ["Build Android APK"]
@@ -35,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout release source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || 'main' }}
           fetch-depth: 0
@@ -71,7 +68,7 @@ jobs:
 
       - name: Set up JDK 17
         if: env.RELEASE_ENABLED == 'true'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
@@ -79,12 +76,6 @@ jobs:
       - name: Set up Android SDK
         if: env.RELEASE_ENABLED == 'true'
         uses: android-actions/setup-android@v4
-
-      - name: Set up Gradle
-        if: env.RELEASE_ENABLED == 'true'
-        uses: gradle/actions/setup-gradle@v5
-        with:
-          gradle-version: '8.14.3'
 
       - name: Prepare release signing
         if: env.RELEASE_ENABLED == 'true'
@@ -100,10 +91,12 @@ jobs:
             echo "ANDROID_KEYSTORE_BASE64 is not configured; release APK will use default signing behavior."
             exit 0
           fi
+
           mkdir -p "$RUNNER_TEMP/android-signing"
           KEYSTORE_PATH="$RUNNER_TEMP/android-signing/release.jks"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           chmod 600 "$KEYSTORE_PATH"
+
           echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
           echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
@@ -114,13 +107,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-            GRADLE_CMD=./gradlew
-          else
-            GRADLE_CMD=gradle
+
+          if [ ! -f ./gradlew ]; then
+            echo "Missing Gradle Wrapper script: ./gradlew"
+            exit 1
           fi
-          "$GRADLE_CMD" :app:assembleRelease --no-daemon --stacktrace
+
+          if [ ! -f ./gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Missing Gradle Wrapper jar: ./gradle/wrapper/gradle-wrapper.jar"
+            exit 1
+          fi
+
+          chmod +x ./gradlew
+          ./gradlew --version
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
           mkdir -p dist
           RELEASE_APK="$(find app/build/outputs/apk/release -name '*release*.apk' -print -quit 2>/dev/null || true)"
           test -n "$RELEASE_APK"
@@ -150,27 +151,10 @@ jobs:
 
           ## 当前修复重点
 
-          ### 再来一次引导
-
-          - 修复已完成过引导的用户，从设置页点击“再来一次引导”后第一页一闪而过的问题。
-          - 修复退出应用再进入后，需要连续点击多次才可正常重新进入引导的问题。
-          - 每次从设置页重新打开引导都会创建新的引导会话。
-          - 引导页会强制从第一页开始，不再复用旧页面状态。
-          - 引导期间顶层主页返回逻辑不会抢占当前引导流程。
-
-          ### 性能与交互
-
-          - 参考图选择后延迟到生成时再读取，减少刚打开图片后的卡顿。
-          - 滚动页面禁用边界回弹效果，减少底部导航栏附近的回弹卡顿。
-          - 接口、模型与生成参数选择器使用对话框列表展示，避免底部弹层带来的重布局压力。
-          - 生成完成后支持通知栏提示。
-
-          ### 发布链路
-
-          - Release workflow 会覆盖上传同一个 `v1.9` 的 `app-release.apk` 资产。
-          - Build workflow 不再依赖 `actions/upload-artifact`，避免 artifact 服务异常影响 APK 生成。
-          - 文档类变更不再触发无意义 APK 构建与重新发布。
-          - 旧构建完成后不会再拿最新 main 重复发布，避免 tag 与 APK 被错误覆盖。
+          - 修复引导页状态复用导致的异常跳页问题。
+          - 优化参考图读取时机，减少图片选择后的卡顿。
+          - 优化 Android 图片保存、通知、分享和历史记录体验。
+          - 完整补齐 Gradle Wrapper 和 CI 构建链路。
 
           ## 下载
 
