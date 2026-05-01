@@ -1,0 +1,350 @@
+name: Refine v2.1 UI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refine-v21-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply v2.1 UI refinements
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          main_file = Path("app/src/main/java/com/yang/emperor/MainActivity.kt")
+          ui_file = Path("app/src/main/java/com/yang/emperor/MainUiComponents.kt")
+
+          main = main_file.read_text(encoding="utf-8")
+          ui = ui_file.read_text(encoding="utf-8")
+
+          def replace_once(text: str, old: str, new: str, name: str) -> str:
+              if old not in text:
+                  raise RuntimeError(f"MISSING_BLOCK:{name}")
+              return text.replace(old, new, 1)
+
+          if "import androidx.compose.material.icons.filled.Delete" not in main:
+              main = replace_once(
+                  main,
+                  "import androidx.compose.material.icons.filled.KeyboardArrowDown\nimport androidx.compose.material.icons.filled.KeyboardArrowUp",
+                  "import androidx.compose.material.icons.filled.Delete\nimport androidx.compose.material.icons.filled.KeyboardArrowDown\nimport androidx.compose.material.icons.filled.KeyboardArrowUp",
+                  "delete-import",
+              )
+
+          if "developerAvatarCache" not in main:
+              main = replace_once(
+                  main,
+                  '''private const val IMAGEFORGE_VERSION_NAME = "2.1"
+
+          private suspend fun loadDeveloperAvatarBitmap(): Bitmap? = withContext(Dispatchers.IO) {
+              runCatching {
+                  val connection = URL(DEVELOPER_QQ_AVATAR_URL).openConnection()
+                  connection.setRequestProperty("User-Agent", "Mozilla/5.0 ImageForge")
+                  connection.connectTimeout = 8000
+                  connection.readTimeout = 8000
+                  connection.getInputStream().use { input ->
+                      BitmapFactory.decodeStream(input)
+                  }
+              }.getOrNull()
+          }''',
+                  '''private const val IMAGEFORGE_VERSION_NAME = "2.1"
+
+          private var developerAvatarCache: Bitmap? = null
+
+          private suspend fun loadDeveloperAvatarBitmap(): Bitmap? = withContext(Dispatchers.IO) {
+              developerAvatarCache ?: runCatching {
+                  val connection = URL(DEVELOPER_QQ_AVATAR_URL).openConnection()
+                  connection.setRequestProperty("User-Agent", "Mozilla/5.0 ImageForge")
+                  connection.connectTimeout = 8000
+                  connection.readTimeout = 8000
+                  connection.getInputStream().use { input ->
+                      BitmapFactory.decodeStream(input)
+                  }
+              }.getOrNull()?.also { developerAvatarCache = it }
+          }''',
+                  "avatar-cache",
+              )
+
+          if "任务信息：" in main or "堆栈摘要：" in main:
+              main, n = re.subn(
+                  r"private fun detailedTaskErrorMessage\(e: Exception, task: ImageTask\): String \{.*?\n\}\n\n\nclass MainActivity",
+                  '''private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
+              val root = generateSequence(e as Throwable?) { it.cause }.lastOrNull()
+              val rootMessage = root?.message ?: e.message ?: "无详细异常消息"
+
+              return when (root) {
+                  is SocketTimeoutException -> "请求超时：接口在限定时间内没有返回结果。"
+                  is UnknownHostException -> "网络解析失败：无法解析 Base URL 的域名。"
+                  is IOException -> "网络请求失败：连接被中断、服务端无响应或当前网络不可用。"
+                  else -> when {
+                      rootMessage.contains("timeout", ignoreCase = true) -> "请求超时：模型生成耗时较长或服务端排队。"
+                      rootMessage.contains("401") -> "认证失败：API Key 可能无效或权限不足。"
+                      rootMessage.contains("403") -> "请求被拒绝：账号、模型或接口权限可能不足。"
+                      rootMessage.contains("404") -> "接口不存在：Base URL、接口模式或模型路径可能不匹配。"
+                      rootMessage.contains("429") -> "请求过多：服务端限流或额度不足。"
+                      rootMessage.contains("500") || rootMessage.contains("502") || rootMessage.contains("503") -> "服务端错误：图像服务暂时不可用。"
+                      else -> "生成失败：接口返回异常或请求处理失败。"
+                  }
+              }
+          }
+
+
+          class MainActivity''',
+                  main,
+                  count=1,
+                  flags=re.S,
+              )
+              if n != 1:
+                  raise RuntimeError("MISSING_BLOCK:error-function")
+
+          if "previewHistoryItem" not in main:
+              main = replace_once(
+                  main,
+                  'var previewSavedPath by remember { mutableStateOf("") }\n    var history by remember { mutableStateOf(loadHistory(prefs)) }',
+                  'var previewSavedPath by remember { mutableStateOf("") }\n    var previewHistoryItem by remember { mutableStateOf(null as HistoryItem?) }\n    var history by remember { mutableStateOf(loadHistory(prefs)) }',
+                  "preview-state",
+              )
+
+          if "currentRoute == ScreenRoute.HISTORY && selectedHistoryKeys.isNotEmpty()" not in main:
+              main = replace_once(
+                  main,
+                  '''    BackHandler(enabled = currentRoute != ScreenRoute.MAIN && !showOnboarding) {
+              currentRoute = ScreenRoute.MAIN
+          }''',
+                  '''    BackHandler(enabled = (currentRoute != ScreenRoute.MAIN || selectedHistoryKeys.isNotEmpty()) && !showOnboarding) {
+              if (currentRoute == ScreenRoute.HISTORY && selectedHistoryKeys.isNotEmpty()) {
+                  selectedHistoryKeys.clear()
+              } else {
+                  currentRoute = ScreenRoute.MAIN
+              }
+          }''',
+                  "back-handler",
+              )
+
+          if 'title = { Text("图片详情") }' not in main:
+              preview_dialog = '''
+
+              previewHistoryItem?.let { item ->
+                  AlertDialog(
+                      onDismissRequest = { previewHistoryItem = null },
+                      title = { Text("图片详情") },
+                      text = {
+                          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                              Text("描述词", fontWeight = FontWeight.Bold)
+                              Text(item.prompt, color = Color(0xFF4B5563), style = MaterialTheme.typography.bodyMedium)
+                              Text("保存地址", fontWeight = FontWeight.Bold)
+                              Text(
+                                  item.path,
+                                  color = Color(0xFF4B5563),
+                                  style = MaterialTheme.typography.bodyMedium,
+                                  maxLines = 3,
+                                  overflow = TextOverflow.Ellipsis
+                              )
+                          }
+                      },
+                      confirmButton = {
+                          TextButton(onClick = { shareImageFromHistory(context, item.path) }) {
+                              Text("分享")
+                          }
+                      },
+                      dismissButton = {
+                          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                              TextButton(onClick = {
+                                  copyTextToClipboard(context, "ImageForge Save Path", item.path)
+                                  status = "保存地址已复制。"
+                              }) { Text("复制地址") }
+                              TextButton(onClick = { previewHistoryItem = null }) { Text("关闭") }
+                          }
+                      },
+                      shape = RoundedCornerShape(24.dp)
+                  )
+              }
+          '''
+              main = main.replace("\n    if (showReferenceSheet) {", preview_dialog + "\n    if (showReferenceSheet) {", 1)
+
+          if "previewHistoryItem = item" not in main:
+              main = replace_once(
+                  main,
+                  '''                            onCopyError = {
+                                      copyTextToClipboard(context, "ImageForge Error", item.error)
+                                      status = "错误详情已复制。"
+                                  },
+                                  onShare = { shareImageFromHistory(context, item.path) }
+                              )''',
+                  '''                            onCopyError = {
+                                      copyTextToClipboard(context, "ImageForge Error", item.error)
+                                      status = "错误详情已复制。"
+                                  },
+                                  onShare = { shareImageFromHistory(context, item.path) },
+                                  onPreview = {
+                                      if (item.state == "success" && item.path.startsWith("content://")) {
+                                          previewHistoryItem = item
+                                      }
+                                  }
+                              )''',
+                  "history-on-preview",
+              )
+
+          if 'Text("🗑"' in main:
+              main = replace_once(
+                  main,
+                  '''                        Box(contentAlignment = Alignment.Center) {
+                                      Text("🗑", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                  }''',
+                  '''                        Box(contentAlignment = Alignment.Center) {
+                                      Icon(
+                                          imageVector = Icons.Default.Delete,
+                                          contentDescription = "删除",
+                                          tint = Color.White,
+                                          modifier = Modifier.size(26.dp)
+                                      )
+                                  }''',
+                  "delete-fab",
+              )
+
+          if 'Text("图片保存路径"' not in main:
+              main = replace_once(
+                  main,
+                  '''                    Button(
+                              onClick = onSave,
+                              modifier = Modifier.fillMaxWidth()
+                          ) {
+                              Text("保存连接设置")
+                          }''',
+                  '''                    Surface(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .clip(RoundedCornerShape(18.dp))
+                                  .clickable {
+                                      Toast.makeText(context, "当前默认保存到系统相册 / Pictures/ImageForge", Toast.LENGTH_SHORT).show()
+                                  },
+                              color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                              shape = RoundedCornerShape(18.dp),
+                              tonalElevation = 1.dp
+                          ) {
+                              Row(
+                                  modifier = Modifier
+                                      .fillMaxWidth()
+                                      .padding(horizontal = 16.dp, vertical = 14.dp),
+                                  horizontalArrangement = Arrangement.SpaceBetween,
+                                  verticalAlignment = Alignment.CenterVertically
+                              ) {
+                                  Column(
+                                      modifier = Modifier.weight(1f),
+                                      verticalArrangement = Arrangement.spacedBy(4.dp)
+                                  ) {
+                                      Text("图片保存路径", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                      Text(
+                                          "系统相册 / Pictures/ImageForge",
+                                          color = Color(0xFF6B7280),
+                                          style = MaterialTheme.typography.bodySmall,
+                                          maxLines = 1,
+                                          overflow = TextOverflow.Ellipsis
+                                      )
+                                  }
+                                  Text("›", fontSize = 28.sp, color = accent, fontWeight = FontWeight.SemiBold)
+                              }
+                          }
+
+                          Button(
+                              onClick = onSave,
+                              modifier = Modifier.fillMaxWidth()
+                          ) {
+                              Text("保存连接设置")
+                          }''',
+                  "settings-save-path",
+              )
+
+          if "onPreview: () -> Unit = {}" not in ui:
+              ui = replace_once(
+                  ui,
+                  '''    onDelete: () -> Unit = {},
+              onCopyError: () -> Unit = {},
+              onShare: () -> Unit
+          ) {''',
+                  '''    onDelete: () -> Unit = {},
+              onCopyError: () -> Unit = {},
+              onShare: () -> Unit,
+              onPreview: () -> Unit = {}
+          ) {''',
+                  "ui-signature",
+              )
+
+          if "onPreview()" not in ui:
+              ui = replace_once(
+                  ui,
+                  '''            .combinedClickable(
+                      onClick = {
+                          if (selectionMode) onToggleSelected()
+                      },
+                      onLongClick = onLongPress
+                  )''',
+                  '''            .combinedClickable(
+                      onClick = {
+                          if (selectionMode) {
+                              onToggleSelected()
+                          } else {
+                              onPreview()
+                          }
+                      },
+                      onLongClick = onLongPress
+                  )''',
+                  "ui-click-preview",
+              )
+
+          if '保存地址：${item.path}' in ui:
+              ui = replace_once(
+                  ui,
+                  '''                } else {
+                              Text(
+                                  text = "保存地址：${item.path}",
+                                  color = Color(0xFF4B5563),
+                                  style = MaterialTheme.typography.bodyMedium,
+                                  maxLines = 2,
+                                  overflow = TextOverflow.Ellipsis
+                              )
+                          }
+
+                          Text(
+                              text = "${item.time} · ${if (item.mode == "edit") "图生图" else "文生图"}",
+                              color = Color(0xFF4B5563),
+                              style = MaterialTheme.typography.bodyMedium
+                          )''',
+                  '''                }
+
+                          Text(
+                              text = "${item.time} · ${if (item.mode == "edit") "图生图" else "文生图"}",
+                              color = Color(0xFF4B5563),
+                              style = MaterialTheme.typography.bodyMedium
+                          )''',
+                  "ui-hide-path",
+              )
+
+          main_file.write_text(main, encoding="utf-8")
+          ui_file.write_text(ui, encoding="utf-8")
+
+          PY
+
+      - name: Commit refinements
+        run: |
+          if git diff --quiet -- app/src/main/java/com/yang/emperor/MainActivity.kt app/src/main/java/com/yang/emperor/MainUiComponents.kt; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/yang/emperor/MainActivity.kt app/src/main/java/com/yang/emperor/MainUiComponents.kt
+          git commit -m "refine v2.1 UI interactions and history details"
+          git push
