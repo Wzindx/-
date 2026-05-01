@@ -1040,12 +1040,15 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             }
         ) { padding ->
             CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(pageBg)
+                    .padding(padding)
+            ) {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(pageBg)
-                        .padding(padding),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                 item {
@@ -1057,33 +1060,10 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("历史记录", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                            Text("最近生成与编辑结果", color = Color(0xFF6B7280))
+                            Text("图片记录", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text("最近生成与编辑的图片", color = Color(0xFF6B7280))
                         }
-                        if (selectedHistoryKeys.isNotEmpty()) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(onClick = {
-                                    selectedHistoryKeys.clear()
-                                }) { Text("取消") }
-                                TextButton(onClick = {
-                                    selectedHistoryKeys.clear()
-                                    selectedHistoryKeys.addAll(history.map { "${it.time}|${it.prompt}" })
-                                }) { Text("全选") }
-                                TextButton(onClick = {
-                                    val keys = selectedHistoryKeys.toSet()
-                                    history = history.filterNot { "${it.time}|${it.prompt}" in keys }
-                                    saveHistory(prefs, history)
-                                    selectedHistoryKeys.clear()
-                                    status = "已删除选中的历史记录。"
-                                }) { Text("删除") }
-                            }
-                        } else {
-                            Text(
-                                text = "长按选择",
-                                color = Color(0xFF6B7280),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+
                     }
                 }
                 item {
@@ -1155,6 +1135,47 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
 }
 
 
+
+                // Floating top-right select-all button
+                if (selectedHistoryKeys.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            selectedHistoryKeys.clear()
+                            selectedHistoryKeys.addAll(history.map { "${it.time}|${it.prompt}" })
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 8.dp, end = 8.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFFE0E7FF))
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text("全选", color = Color(0xFF3730A3), fontWeight = FontWeight.Bold)
+                    }
+                }
+                // Floating bottom-right delete FAB
+                if (selectedHistoryKeys.isNotEmpty()) {
+                    Surface(
+                        onClick = {
+                            val keys = selectedHistoryKeys.toSet()
+                            history = history.filterNot { "${it.time}|${it.prompt}" in keys }
+                            saveHistory(prefs, history)
+                            selectedHistoryKeys.clear()
+                            status = "已删除选中的图片记录。"
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 24.dp, end = 20.dp)
+                            .size(60.dp),
+                        shape = CircleShape,
+                        color = Color(0xFFE11D48),
+                        shadowElevation = 8.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("🗑", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
 @Composable
 private fun OnboardingScreen(
     baseUrl: String,
