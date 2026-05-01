@@ -1,7 +1,6 @@
 # ImageForge
 
-[![Build Android APK](https://github.com/Wzindx/ImageForge/actions/workflows/android.yml/badge.svg)](https://github.com/Wzindx/ImageForge/actions/workflows/android.yml)
-[![Release Android APK](https://github.com/Wzindx/ImageForge/actions/workflows/release.yml/badge.svg)](https://github.com/Wzindx/ImageForge/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Wzindx/ImageForge?label=Latest%20Release)](https://github.com/Wzindx/ImageForge/releases/latest)
 
 ImageForge 是一个面向 Android 的通用图像生成工坊，基于 Kotlin 与 Jetpack Compose 构建。项目目标是把图像生成、参考图编辑、接口配置、后台任务、历史记录和移动端交互整合到一个轻量、直接、适合手机使用的应用中。
 
