@@ -76,6 +76,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -938,7 +939,7 @@ private fun OnboardingScreen(
     BackHandler(enabled = true) {
         // 引导页不响应系统返回键，避免误触直接回到主页面。
     }
-    var page by remember { mutableStateOf(0) }
+    var page by remember { mutableIntStateOf(0) }
     val totalPages = 4
     val canSave = baseUrl.isNotBlank() && apiKey.isNotBlank()
 
