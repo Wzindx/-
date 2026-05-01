@@ -25,14 +25,24 @@ jobs:
 
           path = Path("app/src/main/java/com/yang/emperor/MainActivity.kt")
           text = path.read_text(encoding="utf-8")
+          original = text
 
-          text = text.replace('import android.content.Context\nimport android.content.pm.PackageManager',
-                              'import android.content.Context\nimport android.content.Intent\nimport android.content.pm.PackageManager')
+          def require_contains(value: str, label: str):
+              if value not in text:
+                  raise SystemExit(f"Required anchor not found: {label}")
+
+          if "import android.content.Intent" not in text:
+              require_contains("import android.content.Context\n", "Context import")
+              text = text.replace(
+                  "import android.content.Context\n",
+                  "import android.content.Context\nimport android.content.Intent\n",
+                  1,
+              )
 
           text = text.replace('text = "UniversalImageStudio",', 'text = "ImageForge",')
 
           if "private const val DEVELOPER_QQ" not in text:
-              marker = "class MainActivity : ComponentActivity() {"
+              require_contains("class MainActivity : ComponentActivity() {", "MainActivity class")
               inject = '''private const val DEVELOPER_QQ = "2753761311"
           private const val IMAGEFORGE_REPO_URL = "https://github.com/Wzindx/ImageForge"
 
@@ -52,21 +62,17 @@ jobs:
           }
 
           '''
-              text = text.replace(marker, inject + marker)
+              text = text.replace("class MainActivity : ComponentActivity() {", inject + "class MainActivity : ComponentActivity() {", 1)
 
-          settings_start = '''    outerPadding: PaddingValues = PaddingValues()
-          ) {
-              Scaffold(
-                  containerColor = pageBg
-              ) { padding ->'''
-          settings_new = '''    outerPadding: PaddingValues = PaddingValues()
-          ) {
-              val context = androidx.compose.ui.platform.LocalContext.current
+          settings_idx = text.find("private fun SettingsScreen(")
+          if settings_idx < 0:
+              raise SystemExit("SettingsScreen not found")
 
-              Scaffold(
-                  containerColor = pageBg
-              ) { padding ->'''
-          text = text.replace(settings_start, settings_new)
+          if "val context = androidx.compose.ui.platform.LocalContext.current" not in text[settings_idx:]:
+              brace_idx = text.find(") {\n    Scaffold(", settings_idx)
+              if brace_idx < 0:
+                  raise SystemExit("SettingsScreen function opening not found")
+              text = text[:brace_idx] + ") {\n    val context = androidx.compose.ui.platform.LocalContext.current\n\n    Scaffold(" + text[brace_idx + len(") {\n    Scaffold("):]
 
           if 'SectionTitle("软件信息", "应用名称、开源地址和开发者联系方式")' not in text:
               old = '''                    if (settingsNotice.isNotBlank()) {
@@ -74,83 +80,91 @@ jobs:
                           }
                       }
                   }
-              }'''
+              }
+          }
+          }'''
               new = '''                    if (settingsNotice.isNotBlank()) {
                               StatusCard(settingsNotice)
                           }
                       }
                   }
+              }
 
-                  ElevatedCard(
-                      colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
-                      shape = RoundedCornerShape(28.dp)
+              ElevatedCard(
+                  colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+                  shape = RoundedCornerShape(28.dp)
+              ) {
+                  Column(
+                      modifier = Modifier.padding(18.dp),
+                      verticalArrangement = Arrangement.spacedBy(14.dp)
                   ) {
-                      Column(
-                          modifier = Modifier.padding(18.dp),
-                          verticalArrangement = Arrangement.spacedBy(14.dp)
-                      ) {
-                          SectionTitle("软件信息", "应用名称、开源地址和开发者联系方式")
+                      SectionTitle("软件信息", "应用名称、开源地址和开发者联系方式")
 
-                          Row(
+                      Row(
+                          modifier = Modifier
+                              .fillMaxWidth()
+                              .clip(RoundedCornerShape(20.dp))
+                              .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                              .clickable { openDeveloperQQ(context) }
+                              .padding(14.dp),
+                          horizontalArrangement = Arrangement.spacedBy(14.dp),
+                          verticalAlignment = Alignment.CenterVertically
+                      ) {
+                          Box(
                               modifier = Modifier
-                                  .fillMaxWidth()
-                                  .clip(RoundedCornerShape(20.dp))
-                                  .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                  .clickable { openDeveloperQQ(context) }
-                                  .padding(14.dp),
-                              horizontalArrangement = Arrangement.spacedBy(14.dp),
-                              verticalAlignment = Alignment.CenterVertically
+                                  .size(58.dp)
+                                  .clip(CircleShape)
+                                  .background(accent.copy(alpha = 0.14f)),
+                              contentAlignment = Alignment.Center
                           ) {
-                              Box(
-                                  modifier = Modifier
-                                      .size(58.dp)
-                                      .clip(CircleShape)
-                                      .background(accent.copy(alpha = 0.14f)),
-                                  contentAlignment = Alignment.Center
-                              ) {
-                                  Text(
-                                      text = "QQ",
-                                      color = accent,
-                                      fontWeight = FontWeight.Black,
-                                      fontSize = 20.sp
-                                  )
-                              }
-                              Column(
-                                  modifier = Modifier.weight(1f),
-                                  verticalArrangement = Arrangement.spacedBy(4.dp)
-                              ) {
-                                  Text(
-                                      text = "开发者 QQ",
-                                      color = MaterialTheme.colorScheme.primary,
-                                      fontWeight = FontWeight.SemiBold,
-                                      style = MaterialTheme.typography.labelLarge
-                                  )
-                                  Text(
-                                      text = "$DEVELOPER_QQ · 点击直达 QQ",
-                                      style = MaterialTheme.typography.bodyMedium,
-                                      color = MaterialTheme.colorScheme.onSurface
-                                  )
-                              }
                               Text(
-                                  text = "›",
-                                  fontSize = 34.sp,
+                                  text = "QQ",
                                   color = accent,
-                                  fontWeight = FontWeight.SemiBold
+                                  fontWeight = FontWeight.Black,
+                                  fontSize = 20.sp
                               )
                           }
-
-                          InfoCard("应用名称", "ImageForge / 通用图像工坊")
-                          InfoCard("当前版本", "2.0.0")
-                          InfoCard("开源地址", IMAGEFORGE_REPO_URL)
-                          InfoCard("图片保存目录", "系统相册 / Pictures / ImageForge")
+                          Column(
+                              modifier = Modifier.weight(1f),
+                              verticalArrangement = Arrangement.spacedBy(4.dp)
+                          ) {
+                              Text(
+                                  text = "开发者 QQ",
+                                  color = MaterialTheme.colorScheme.primary,
+                                  fontWeight = FontWeight.SemiBold,
+                                  style = MaterialTheme.typography.labelLarge
+                              )
+                              Text(
+                                  text = "$DEVELOPER_QQ · 点击直达 QQ",
+                                  style = MaterialTheme.typography.bodyMedium,
+                                  color = MaterialTheme.colorScheme.onSurface
+                              )
+                          }
+                          Text(
+                              text = "›",
+                              fontSize = 34.sp,
+                              color = accent,
+                              fontWeight = FontWeight.SemiBold
+                          )
                       }
+
+                      InfoCard("应用名称", "ImageForge / 通用图像工坊")
+                      InfoCard("当前版本", "2.0.0")
+                      InfoCard("开源地址", IMAGEFORGE_REPO_URL)
+                      InfoCard("图片保存目录", "系统相册 / Pictures / ImageForge")
                   }
-              }'''
+              }
+          }
+          }'''
               if old not in text:
-                  raise SystemExit("Settings insertion point not found")
+                  raise SystemExit("Settings insertion point not found in current MainActivity.kt")
               text = text.replace(old, new, 1)
 
           path.write_text(text, encoding="utf-8")
+          print("Changed:", text != original)
+          print("Has DEVELOPER_QQ:", "DEVELOPER_QQ" in text)
+          print("Has app info:", "软件信息" in text)
+          print("Has ImageForge onboarding:", 'text = "ImageForge",' in text)
           PY
 
       - name: Commit MainActivity update
