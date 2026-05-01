@@ -585,6 +585,8 @@ fun HistoryCard(
     item: HistoryItem,
     onShare: () -> Unit
 ) {
+    var showPrompt by remember(item.time, item.prompt) { mutableStateOf(false) }
+
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF5F6FF)),
         shape = RoundedCornerShape(28.dp)
@@ -624,12 +626,39 @@ fun HistoryCard(
                     )
                 }
                 Text(
-                    text = if (item.error.isNotBlank()) "错误：${item.error}" else "图片信息：${item.path}",
+                    text = if (item.error.isNotBlank()) "错误：${item.error}" else "保存地址：${item.path}",
                     color = Color(0xFF4B5563),
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (item.prompt.isNotBlank()) {
+                    TextButton(
+                        onClick = { showPrompt = !showPrompt },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color(0xFFEFF6FF))
+                            .padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = if (showPrompt) "隐藏描述词" else "查看描述词",
+                            color = Color(0xFF2563EB),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    if (showPrompt) {
+                        Text(
+                            text = "描述词：${item.prompt}",
+                            color = Color(0xFF4B5563),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
                 Text(
                     text = "${item.time} · ${if (item.mode == "edit") "图生图" else "文生图"}",
                     color = Color(0xFF4B5563),
