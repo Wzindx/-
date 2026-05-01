@@ -12,9 +12,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.net.toUri
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -92,11 +94,27 @@ fun shareImageFromHistory(context: Context, imageUri: String) {
     }
 }
 
-fun saveToGallery(context: Context, bytes: ByteArray, format: String): String {
+fun saveToGallery(
+    context: Context,
+    bytes: ByteArray,
+    format: String,
+    customDirectoryUri: Uri? = null
+): String {
     require(bytes.isNotEmpty()) { "图片数据为空，无法保存" }
 
     val normalizedFormat = normalizeImageFormat(format)
     val name = "image_${System.currentTimeMillis()}.${normalizedFormat.extension}"
+
+    if (customDirectoryUri != null) {
+        return saveToCustomDirectory(
+            context = context,
+            bytes = bytes,
+            name = name,
+            mimeType = normalizedFormat.mimeType,
+            directoryUri = customDirectoryUri
+        )
+    }
+
     val values = ContentValues().apply {
         put(MediaStore.Images.Media.DISPLAY_NAME, name)
         put(MediaStore.Images.Media.MIME_TYPE, normalizedFormat.mimeType)
@@ -129,6 +147,33 @@ fun saveToGallery(context: Context, bytes: ByteArray, format: String): String {
         return uri.toString()
     } catch (e: Exception) {
         runCatching { resolver.delete(uri, null, null) }
+        throw e
+    }
+}
+
+private fun saveToCustomDirectory(
+    context: Context,
+    bytes: ByteArray,
+    name: String,
+    mimeType: String,
+    directoryUri: Uri
+): String {
+    val resolver = context.contentResolver
+    val imageUri = DocumentsContract.createDocument(
+        resolver,
+        directoryUri,
+        mimeType,
+        name
+    ) ?: error("无法在所选目录创建图片文件，请重新选择保存路径")
+
+    try {
+        resolver.openOutputStream(imageUri)?.use { output ->
+            output.write(bytes)
+            output.flush()
+        } ?: error("无法打开所选目录的图片输出流")
+        return imageUri.toString()
+    } catch (e: Exception) {
+        runCatching { DocumentsContract.deleteDocument(resolver, imageUri) }
         throw e
     }
 }
