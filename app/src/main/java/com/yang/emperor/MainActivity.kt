@@ -16,6 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -318,7 +319,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 onBaseUrlChange = { baseUrl = it },
                 onApiKeyChange = { apiKey = it },
                 onSkip = {
-                    prefs.edit().putBoolean("onboardingDone", true).apply()
+                    prefs.edit { putBoolean("onboardingDone", true) }
                     showOnboarding = false
                     currentRoute = runCatching { ScreenRoute.valueOf(onboardingReturnRoute) }.getOrDefault(ScreenRoute.MAIN)
                 },
@@ -532,7 +533,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             settingsNotice = settingsNotice,
             onBack = { currentRoute = ScreenRoute.MAIN },
             onClearConfig = {
-                prefs.edit().clear().apply()
+                prefs.edit { clear() }
                 baseUrl = "https://api.openai.com/v1"
                 apiKey = ""
                 apiMode = ApiMode.IMAGES

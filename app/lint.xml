@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Dependency/platform cadence advisories are reviewed manually.
+         Code correctness, resources, manifest, API and security checks remain enabled. -->
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="OldTargetApi" severity="ignore" />
+</lint>

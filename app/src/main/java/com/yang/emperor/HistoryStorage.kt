@@ -2,6 +2,7 @@ package com.yang.emperor
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import org.json.JSONArray
@@ -74,7 +75,7 @@ fun saveHistory(prefs: SharedPreferences, items: List<HistoryItem>) {
                 .put("error", item.error.truncateHistoryError())
         )
     }
-    prefs.edit().putString(HISTORY_KEY, arr.toString()).apply()
+    prefs.edit { putString(HISTORY_KEY, arr.toString()) }
 }
 
 private fun createEncryptedPreferencesOrNull(context: Context): SharedPreferences? {
@@ -98,7 +99,6 @@ private fun migrateLegacyConfigIfNeeded(
     securePrefs: SharedPreferences
 ) {
     if (securePrefs.getBoolean(SECURE_MIGRATED_FROM_V16, false)) return
-
     val keys = listOf(
         "baseUrl",
         "apiKey",
@@ -108,21 +108,19 @@ private fun migrateLegacyConfigIfNeeded(
         "model",
         HISTORY_KEY
     )
-
-    val editor = securePrefs.edit()
-    keys.forEach { key ->
-        val value = legacyPrefs.getString(key, null)
-        if (value != null) {
-            editor.putString(key, value)
+    securePrefs.edit {
+        keys.forEach { key ->
+            val value = legacyPrefs.getString(key, null)
+            if (value != null) {
+                putString(key, value)
+            }
         }
+        putBoolean(SECURE_MIGRATED_FROM_V16, true)
     }
-    editor.putBoolean(SECURE_MIGRATED_FROM_V16, true).apply()
-
-    legacyPrefs.edit().apply {
+    legacyPrefs.edit {
         keys.forEach { key -> remove(key) }
-    }.apply()
+    }
 }
-
 private fun String.truncateHistoryError(): String {
     if (length <= MAX_HISTORY_ERROR_CHARS) return this
     return take(MAX_HISTORY_ERROR_CHARS) + "\n...（错误信息过长，已截断）"

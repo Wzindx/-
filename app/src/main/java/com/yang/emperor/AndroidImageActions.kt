@@ -11,7 +11,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
+import androidx.core.net.toUri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -74,7 +74,7 @@ fun notifyImageReady(context: Context, imageUri: String) {
 fun shareImageFromHistory(context: Context, imageUri: String) {
     if (!imageUri.startsWith("content://")) return
 
-    val uri = Uri.parse(imageUri)
+    val uri = imageUri.toUri()
     val shareIntent = Intent(Intent.ACTION_SEND).apply {
         type = "image/*"
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -143,7 +143,7 @@ private fun canPostNotifications(context: Context): Boolean {
 
 private fun buildOpenImageIntent(context: Context, imageUri: String): Intent {
     if (imageUri.startsWith("content://")) {
-        val uri = Uri.parse(imageUri)
+        val uri = imageUri.toUri()
         return Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "image/*")
             clipData = ClipData.newUri(context.contentResolver, "generated_image", uri)
