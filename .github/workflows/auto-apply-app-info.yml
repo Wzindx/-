@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
+      - "README.md"
       - ".github/workflows/auto-apply-app-info.yml"
   workflow_dispatch:
 
@@ -42,10 +43,16 @@ jobs:
           private const val IMAGEFORGE_REPO_URL = "https://github.com/Wzindx/ImageForge"
 
           private fun openDeveloperQQ(context: Context) {
-              val qqIntent = Intent(Intent.ACTION_VIEW, Uri.parse("mqqwpa://im/chat?chat_type=wpa&uin=$DEVELOPER_QQ")).apply {
+              val qqIntent = Intent(
+                  Intent.ACTION_VIEW,
+                  Uri.parse("mqqwpa://im/chat?chat_type=wpa&uin=$DEVELOPER_QQ")
+              ).apply {
                   addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
               }
-              val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wpa.qq.com/msgrd?v=3&uin=$DEVELOPER_QQ&site=qq&menu=yes")).apply {
+              val webIntent = Intent(
+                  Intent.ACTION_VIEW,
+                  Uri.parse("https://wpa.qq.com/msgrd?v=3&uin=$DEVELOPER_QQ&site=qq&menu=yes")
+              ).apply {
                   addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
               }
 
@@ -74,85 +81,78 @@ jobs:
                   + text[idx + len(target):]
               )
 
-          title = 'SectionTitle("软件信息", "应用名称、开源地址和开发者联系方式")'
-          if title not in text:
-              settings_notice_block = '''                    if (settingsNotice.isNotBlank()) {
+          if 'SectionTitle("软件信息"' not in text:
+              old = '''                    if (settingsNotice.isNotBlank()) {
                               StatusCard(settingsNotice)
                           }
           '''
-              pos = text.find(settings_notice_block, settings_start)
-              if pos < 0:
+              if old not in text[settings_start:]:
                   raise SystemExit("settingsNotice block not found")
 
-              insert_after = pos + len(settings_notice_block)
-              first_card_close = '''                }
-                      }
-          '''
-              close_pos = text.find(first_card_close, insert_after)
-              if close_pos < 0:
-                  raise SystemExit("settings card close not found")
+              new = '''                    if (settingsNotice.isNotBlank()) {
+                              StatusCard(settingsNotice)
+                          }
 
-              info_card = '''
-                      }
+                          HorizontalDivider(
+                              modifier = Modifier.padding(vertical = 4.dp),
+                              thickness = DividerDefaults.Thickness,
+                              color = MaterialTheme.colorScheme.outlineVariant
+                          )
 
-                      ElevatedCard(
-                          colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
-                          shape = RoundedCornerShape(28.dp)
-                      ) {
-                          Column(
-                              modifier = Modifier.padding(18.dp),
-                              verticalArrangement = Arrangement.spacedBy(14.dp)
+                          SectionTitle("软件信息", "版本、作者和保存位置")
+
+                          Row(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .clip(RoundedCornerShape(18.dp))
+                                  .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                  .clickable { openDeveloperQQ(context) }
+                                  .padding(14.dp),
+                              horizontalArrangement = Arrangement.spacedBy(14.dp),
+                              verticalAlignment = Alignment.CenterVertically
                           ) {
-                              SectionTitle("软件信息", "应用名称、开源地址和开发者联系方式")
-
-                              Row(
+                              Box(
                                   modifier = Modifier
-                                      .fillMaxWidth()
-                                      .clip(RoundedCornerShape(20.dp))
-                                      .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                      .clickable { openDeveloperQQ(context) }
-                                      .padding(14.dp),
-                                  horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                  verticalAlignment = Alignment.CenterVertically
+                                      .size(54.dp)
+                                      .clip(CircleShape)
+                                      .background(accent.copy(alpha = 0.14f)),
+                                  contentAlignment = Alignment.Center
                               ) {
-                                  Box(
-                                      modifier = Modifier
-                                          .size(58.dp)
-                                          .clip(CircleShape)
-                                          .background(accent.copy(alpha = 0.14f)),
-                                      contentAlignment = Alignment.Center
-                                  ) {
-                                      Text("QQ", color = accent, fontWeight = FontWeight.Black, fontSize = 20.sp)
-                                  }
-
-                                  Column(
-                                      modifier = Modifier.weight(1f),
-                                      verticalArrangement = Arrangement.spacedBy(4.dp)
-                                  ) {
-                                      Text(
-                                          text = "开发者 QQ",
-                                          color = MaterialTheme.colorScheme.primary,
-                                          fontWeight = FontWeight.SemiBold,
-                                          style = MaterialTheme.typography.labelLarge
-                                      )
-                                      Text(
-                                          text = "$DEVELOPER_QQ · 点击直达 QQ",
-                                          style = MaterialTheme.typography.bodyMedium,
-                                          color = MaterialTheme.colorScheme.onSurface
-                                      )
-                                  }
-
-                                  Text("›", fontSize = 34.sp, color = accent, fontWeight = FontWeight.SemiBold)
+                                  Text(
+                                      text = "QQ",
+                                      color = accent,
+                                      fontWeight = FontWeight.Black,
+                                      fontSize = 18.sp
+                                  )
                               }
 
-                              InfoCard("应用名称", "ImageForge / 通用图像工坊")
-                              InfoCard("当前版本", "2.0.0")
-                              InfoCard("开源地址", IMAGEFORGE_REPO_URL)
-                              InfoCard("图片保存目录", "系统相册 / Pictures / ImageForge")
+                              Column(
+                                  modifier = Modifier.weight(1f),
+                                  verticalArrangement = Arrangement.spacedBy(4.dp)
+                              ) {
+                                  Text(
+                                      text = "开发者 QQ",
+                                      color = MaterialTheme.colorScheme.primary,
+                                      fontWeight = FontWeight.Bold,
+                                      style = MaterialTheme.typography.bodyMedium
+                                  )
+                                  Text(
+                                      text = "$DEVELOPER_QQ · 点击直达 QQ",
+                                      color = Color(0xFF6B7280),
+                                      style = MaterialTheme.typography.bodyMedium
+                                  )
+                              }
+
+                              Text("›", fontSize = 30.sp, color = accent, fontWeight = FontWeight.SemiBold)
                           }
-                      }
+
+                          InfoCard("应用名称", "ImageForge / 通用图像工坊")
+                          InfoCard("当前版本", "2.0.0")
+                          InfoCard("开源地址", IMAGEFORGE_REPO_URL)
+                          InfoCard("图片保存目录", "系统相册 / Pictures / ImageForge")
           '''
-              text = text[:close_pos] + info_card + text[close_pos + len(first_card_close):]
+              pos = text.find(old, settings_start)
+              text = text[:pos] + new + text[pos + len(old):]
 
           path.write_text(text, encoding="utf-8")
 
