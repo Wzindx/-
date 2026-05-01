@@ -77,6 +77,25 @@ jobs:
         if: env.RELEASE_ENABLED == 'true'
         uses: android-actions/setup-android@v4
 
+      - name: Configure Android SDK path
+        if: env.RELEASE_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+
+          if [ ! -d "$SDK_DIR" ]; then
+            echo "Android SDK directory does not exist: $SDK_DIR"
+            exit 1
+          fi
+
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_DIR" > local.properties
+
+          echo "Configured Android SDK:"
+          cat local.properties
+
       - name: Prepare release signing
         if: env.RELEASE_ENABLED == 'true'
         shell: bash
@@ -120,6 +139,8 @@ jobs:
 
           chmod +x ./gradlew
           ./gradlew --version
+          test -f local.properties
+          cat local.properties
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
           mkdir -p dist
