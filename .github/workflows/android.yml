@@ -109,8 +109,91 @@ jobs:
       - name: Run Android Lint
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           "$GRADLE_CMD" :app:lintDebug --no-daemon --stacktrace
+          LINT_EXIT_CODE=$?
+          echo "LINT_EXIT_CODE=$LINT_EXIT_CODE" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Publish Lint Diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Lint exit code: ${LINT_EXIT_CODE:-unset}"
+          echo "Available reports:"
+          find app/build/reports -maxdepth 4 -type f -print 2>/dev/null || true
+
+          if [ -f app/build/reports/lint-results-debug.txt ]; then
+            echo "----- lint-results-debug.txt -----"
+            cat app/build/reports/lint-results-debug.txt
+          fi
+
+          if [ -f app/build/reports/lint-results-debug.xml ]; then
+            python3 - <<'PY'
+          import html
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+
+          report = "app/build/reports/lint-results-debug.xml"
+          root = ET.parse(report).getroot()
+
+          def esc(value: str) -> str:
+              return str(value or "").replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A").replace(":", "%3A").replace(",", "%2C")
+
+          count = 0
+          for issue in root.findall("issue"):
+              issue_id = issue.attrib.get("id", "AndroidLint")
+              severity = issue.attrib.get("severity", "Error")
+              message = issue.attrib.get("message", "")
+              explanation = issue.attrib.get("explanation", "")
+              loc = issue.find("location")
+              if loc is None:
+                  print(f"::error title={esc(issue_id)}::{esc(message)}")
+                  count += 1
+                  continue
+
+              file_path = loc.attrib.get("file", "")
+              line = loc.attrib.get("line", "1")
+              column = loc.attrib.get("column", "1")
+
+              if file_path.startswith(os.getcwd() + os.sep):
+                  file_path = os.path.relpath(file_path, os.getcwd())
+
+              detail = message
+              if explanation:
+                  detail = f"{message}\n\n{explanation}"
+
+              level = "error" if severity.lower() in {"fatal", "error"} else "warning"
+              print(f"::{level} file={esc(file_path)},line={esc(line)},col={esc(column)},title={esc(issue_id)}::{esc(detail)}")
+              count += 1
+
+          print(f"Published {count} Android lint annotation(s).")
+          PY
+          fi
+
+      - name: Upload Lint Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-reports
+          path: |
+            app/build/reports/lint-results-debug.*
+            app/build/reports/lint-results-debug/
+            app/build/reports/lint/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail if Android Lint failed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${LINT_EXIT_CODE:-0}" != "0" ]; then
+            echo "Android Lint failed with exit code ${LINT_EXIT_CODE}."
+            exit "$LINT_EXIT_CODE"
+          fi
 
       - name: Build Debug APK
         shell: bash
