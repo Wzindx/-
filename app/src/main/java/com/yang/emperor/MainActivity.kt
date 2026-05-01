@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Build
@@ -80,6 +81,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -115,9 +117,20 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.cancel
 import java.util.UUID
+import java.net.URL
 
 private const val DEVELOPER_QQ = "2753761311"
+private const val DEVELOPER_QQ_AVATAR_URL = "https://q.qlogo.cn/headimg_dl?dst_uin=$DEVELOPER_QQ&spec=640&img_type=jpg"
 private const val IMAGEFORGE_REPO_URL = "https://github.com/Wzindx/ImageForge"
+private const val IMAGEFORGE_VERSION_NAME = "2.1"
+
+private suspend fun loadDeveloperAvatarBitmap(): Bitmap? = withContext(Dispatchers.IO) {
+    runCatching {
+        URL(DEVELOPER_QQ_AVATAR_URL).openStream().use { input ->
+            BitmapFactory.decodeStream(input)
+        }
+    }.getOrNull()
+}
 
 private fun openDeveloperQQ(context: Context) {
     val qqIntent = Intent(
@@ -1345,6 +1358,10 @@ private fun SettingsScreen(
 
                     SectionTitle("软件信息", "版本、作者和保存位置")
 
+                    val developerAvatar by produceState<Bitmap?>(initialValue = null) {
+                        value = loadDeveloperAvatarBitmap()
+                    }
+
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1361,20 +1378,55 @@ private fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
+                            Row(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "开发者 QQ",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    text = "$DEVELOPER_QQ · 点击直达 QQ",
-                                    color = Color(0xFF6B7280),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(accent.copy(alpha = 0.14f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (developerAvatar != null) {
+                                        Image(
+                                            bitmap = developerAvatar!!.asImageBitmap(),
+                                            contentDescription = "开发者 QQ 头像",
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "QQ",
+                                            color = accent,
+                                            fontWeight = FontWeight.Black,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                }
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        text = "开发者 QQ",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = "$DEVELOPER_QQ · 点击直达 QQ",
+                                        color = Color(0xFF6B7280),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = "头像来自 QQ 高清头像接口",
+                                        color = Color(0xFF9CA3AF),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                             Text(
                                 text = "›",
@@ -1402,6 +1454,11 @@ private fun SettingsScreen(
                             )
                             Text(
                                 text = "ImageForge / 通用图像工坊",
+                                color = Color(0xFF6B7280),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "版本：$IMAGEFORGE_VERSION_NAME",
                                 color = Color(0xFF6B7280),
                                 style = MaterialTheme.typography.bodySmall
                             )
