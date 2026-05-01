@@ -684,7 +684,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 customGenerateModel = generateModel
                 customEditModel = editModel
                 history = emptyList()
-                settingsNotice = "已清除接口配置、密钥和历史记录，请重新填写接口设置。"
+                settingsNotice = "已清除接口配置、密钥和图片记录，请重新填写接口设置。"
                 currentRoute = ScreenRoute.SETTINGS
             },
             onShowOnboarding = {
@@ -1088,7 +1088,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    "暂无历史记录",
+                                    "暂无图片记录",
                                     color = Color.Gray,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
@@ -1118,7 +1118,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 history = history.filterNot { it.time == item.time && it.prompt == item.prompt }
                                 saveHistory(prefs, history)
                                 selectedHistoryKeys.remove(itemKey)
-                                status = "已删除该条历史记录。"
+                                status = "已删除该条图片记录。"
                             },
                             onCopyError = {
                                 copyTextToClipboard(context, "ImageForge Error", item.error)
