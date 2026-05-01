@@ -1027,6 +1027,46 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 }
 
             }
+                    // Floating top-right select-all button (only in selection mode)
+                    if (selectedHistoryKeys.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                selectedHistoryKeys.clear()
+                                selectedHistoryKeys.addAll(history.map { "${it.time}|${it.prompt}" })
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 8.dp, end = 8.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0xFFE0E7FF))
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text("全选", color = Color(0xFF3730A3), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    // Floating bottom-right delete FAB (only in selection mode)
+                    if (selectedHistoryKeys.isNotEmpty()) {
+                        Surface(
+                            onClick = {
+                                val keys = selectedHistoryKeys.toSet()
+                                history = history.filterNot { "${it.time}|${it.prompt}" in keys }
+                                saveHistory(prefs, history)
+                                selectedHistoryKeys.clear()
+                                status = "已删除选中的图片记录。"
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(bottom = 24.dp, end = 20.dp)
+                                .size(60.dp),
+                            shape = CircleShape,
+                            color = Color(0xFFE11D48),
+                            shadowElevation = 8.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("🗑", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
             }
         }
 
@@ -1136,46 +1176,6 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
 
 
 
-                // Floating top-right select-all button
-                if (selectedHistoryKeys.isNotEmpty()) {
-                    TextButton(
-                        onClick = {
-                            selectedHistoryKeys.clear()
-                            selectedHistoryKeys.addAll(history.map { "${it.time}|${it.prompt}" })
-                        },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 8.dp, end = 8.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0xFFE0E7FF))
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text("全选", color = Color(0xFF3730A3), fontWeight = FontWeight.Bold)
-                    }
-                }
-                // Floating bottom-right delete FAB
-                if (selectedHistoryKeys.isNotEmpty()) {
-                    Surface(
-                        onClick = {
-                            val keys = selectedHistoryKeys.toSet()
-                            history = history.filterNot { "${it.time}|${it.prompt}" in keys }
-                            saveHistory(prefs, history)
-                            selectedHistoryKeys.clear()
-                            status = "已删除选中的图片记录。"
-                        },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(bottom = 24.dp, end = 20.dp)
-                            .size(60.dp),
-                        shape = CircleShape,
-                        color = Color(0xFFE11D48),
-                        shadowElevation = 8.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("🗑", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
 @Composable
 private fun OnboardingScreen(
     baseUrl: String,
