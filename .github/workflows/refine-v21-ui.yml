@@ -20,7 +20,7 @@ jobs:
 
       - name: Apply v2.1 UI refinements
         run: |
-          python3 <<'PY'
+          cat > /tmp/refine_v21_ui.py <<'PY'
           from pathlib import Path
           import re
 
@@ -30,10 +30,20 @@ jobs:
           main = main_file.read_text(encoding="utf-8")
           ui = ui_file.read_text(encoding="utf-8")
 
+          def require(cond: bool, name: str):
+              if not cond:
+                  raise RuntimeError(f"MISSING_OR_FAILED:{name}")
+
           def replace_once(text: str, old: str, new: str, name: str) -> str:
-              if old not in text:
-                  raise RuntimeError(f"MISSING_BLOCK:{name}")
+              require(old in text, name)
               return text.replace(old, new, 1)
+
+          def replace_between(text: str, start_marker: str, end_marker: str, new_block: str, name: str) -> str:
+              start = text.find(start_marker)
+              require(start >= 0, name + ":start")
+              end = text.find(end_marker, start)
+              require(end >= 0, name + ":end")
+              return text[:start] + new_block + text[end:]
 
           if "import androidx.compose.material.icons.filled.Delete" not in main:
               main = replace_once(
@@ -44,24 +54,11 @@ jobs:
               )
 
           if "developerAvatarCache" not in main:
-              main = replace_once(
+              main = replace_between(
                   main,
-                  '''private const val IMAGEFORGE_VERSION_NAME = "2.1"
-
-          private suspend fun loadDeveloperAvatarBitmap(): Bitmap? = withContext(Dispatchers.IO) {
-              runCatching {
-                  val connection = URL(DEVELOPER_QQ_AVATAR_URL).openConnection()
-                  connection.setRequestProperty("User-Agent", "Mozilla/5.0 ImageForge")
-                  connection.connectTimeout = 8000
-                  connection.readTimeout = 8000
-                  connection.getInputStream().use { input ->
-                      BitmapFactory.decodeStream(input)
-                  }
-              }.getOrNull()
-          }''',
-                  '''private const val IMAGEFORGE_VERSION_NAME = "2.1"
-
-          private var developerAvatarCache: Bitmap? = null
+                  "private suspend fun loadDeveloperAvatarBitmap(): Bitmap?",
+                  "\n\nprivate fun openDeveloperQQ",
+                  '''private var developerAvatarCache: Bitmap? = null
 
           private suspend fun loadDeveloperAvatarBitmap(): Bitmap? = withContext(Dispatchers.IO) {
               developerAvatarCache ?: runCatching {
@@ -78,8 +75,10 @@ jobs:
               )
 
           if "任务信息：" in main or "堆栈摘要：" in main:
-              main, n = re.subn(
-                  r"private fun detailedTaskErrorMessage\(e: Exception, task: ImageTask\): String \{.*?\n\}\n\n\nclass MainActivity",
+              main = replace_between(
+                  main,
+                  "private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String",
+                  "\n\n\nclass MainActivity",
                   '''private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
               val root = generateSequence(e as Throwable?) { it.cause }.lastOrNull()
               val rootMessage = root?.message ?: e.message ?: "无详细异常消息"
@@ -98,16 +97,9 @@ jobs:
                       else -> "生成失败：接口返回异常或请求处理失败。"
                   }
               }
-          }
-
-
-          class MainActivity''',
-                  main,
-                  count=1,
-                  flags=re.S,
+          }''',
+                  "error-function",
               )
-              if n != 1:
-                  raise RuntimeError("MISSING_BLOCK:error-function")
 
           if "previewHistoryItem" not in main:
               main = replace_once(
@@ -134,7 +126,7 @@ jobs:
               )
 
           if 'title = { Text("图片详情") }' not in main:
-              preview_dialog = '''
+              dialog = '''
 
               previewHistoryItem?.let { item ->
                   AlertDialog(
@@ -172,9 +164,9 @@ jobs:
                   )
               }
           '''
-              main = main.replace("\n    if (showReferenceSheet) {", preview_dialog + "\n    if (showReferenceSheet) {", 1)
+              main = main.replace("\n    if (showReferenceSheet) {", dialog + "\n    if (showReferenceSheet) {", 1)
 
-          if "previewHistoryItem = item" not in main:
+          if "onPreview = {" not in main:
               main = replace_once(
                   main,
                   '''                            onCopyError = {
@@ -194,7 +186,7 @@ jobs:
                                       }
                                   }
                               )''',
-                  "history-on-preview",
+                  "main-history-preview",
               )
 
           if 'Text("🗑"' in main:
@@ -332,10 +324,27 @@ jobs:
                   "ui-hide-path",
               )
 
+          checks = {
+              "delete import": "import androidx.compose.material.icons.filled.Delete" in main,
+              "avatar cache": "developerAvatarCache" in main,
+              "compact error": "任务信息：" not in main and "堆栈摘要：" not in main,
+              "back selection": "selectedHistoryKeys.clear()" in main,
+              "preview state": "previewHistoryItem" in main,
+              "preview dialog": 'Text("图片详情")' in main,
+              "settings path": 'Text("图片保存路径"' in main,
+              "delete icon": "Icons.Default.Delete" in main and 'Text("🗑"' not in main,
+              "ui preview callback": "onPreview: () -> Unit = {}" in ui and "onPreview()" in ui,
+              "ui hide path": '保存地址：${item.path}' not in ui,
+          }
+          missing = [k for k, v in checks.items() if not v]
+          if missing:
+              raise RuntimeError("VERIFY_FAILED:" + ",".join(missing))
+
           main_file.write_text(main, encoding="utf-8")
           ui_file.write_text(ui, encoding="utf-8")
-
+          print("refine v2.1 ui ok")
           PY
+          python3 /tmp/refine_v21_ui.py
 
       - name: Commit refinements
         run: |
