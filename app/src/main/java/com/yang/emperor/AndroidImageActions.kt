@@ -21,7 +21,7 @@ import androidx.core.content.ContextCompat
 
 private const val IMAGE_NOTIFICATION_CHANNEL_ID = "image_generation_result"
 private const val IMAGE_NOTIFICATION_ID_BASE = 1001
-private const val IMAGE_SAVE_DIRECTORY = "UniversalImageStudio"
+private const val IMAGE_SAVE_DIRECTORY = "ImageForge"
 
 fun ensureImageNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
