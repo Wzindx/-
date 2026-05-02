@@ -212,6 +212,12 @@ jobs:
 
           sed -i "s/__TAG_NAME__/$TAG_NAME/g; s/__VERSION_NAME__/$VERSION_NAME/g" "$BODY_FILE"
 
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME" --force || true
+          git tag -f "$TAG_NAME" "$RELEASE_SHA"
+          git push origin "refs/tags/$TAG_NAME" --force
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release edit "$TAG_NAME" \
               --target "$RELEASE_SHA" \
