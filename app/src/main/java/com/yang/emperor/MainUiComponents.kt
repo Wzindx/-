@@ -595,6 +595,8 @@ fun HistoryCard(
     onDelete: () -> Unit = {},
     onCopyError: () -> Unit = {},
     onPreview: () -> Unit = {},
+    onOpen: () -> Unit = {},
+    onSave: () -> Unit = {},
     onShare: () -> Unit
 ) {
     val borderColor = if (selected) accent else Color.Transparent
@@ -712,18 +714,36 @@ fun HistoryCard(
                 }
 
                 if (!selectionMode && item.state == "success" && item.path.startsWith("content://")) {
-                    TextButton(
-                        onClick = onShare,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Color(0xFFEDE9FE))
-                            .padding(horizontal = 8.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "分享",
-                            color = Color(0xFF4C1D95),
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        TextButton(
+                            onClick = onOpen,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFEFF6FF))
+                                .padding(horizontal = 8.dp)
+                        ) {
+                            Text("打开", color = Color(0xFF1D4ED8), fontWeight = FontWeight.SemiBold)
+                        }
+                        TextButton(
+                            onClick = onSave,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFE0F2FE))
+                                .padding(horizontal = 8.dp)
+                        ) {
+                            Text("保存", color = Color(0xFF0369A1), fontWeight = FontWeight.SemiBold)
+                        }
+                        TextButton(
+                            onClick = onShare,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFEDE9FE))
+                                .padding(horizontal = 8.dp)
+                        ) {
+                            Text("分享", color = Color(0xFF4C1D95), fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
