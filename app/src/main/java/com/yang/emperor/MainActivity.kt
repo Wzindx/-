@@ -51,6 +51,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -721,22 +722,15 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                Text(
-                                    text = item.prompt,
-                                    modifier = Modifier.padding(14.dp),
-                                    color = Color(0xFF4B5563),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                SelectionContainer {
+                                    Text(
+                                        text = item.prompt,
+                                        modifier = Modifier.padding(14.dp),
+                                        color = Color(0xFF4B5563),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
                             }
-                        }
-                        TextButton(
-                            onClick = {
-                                copyTextToClipboard(context, "ImageForge Prompt", item.prompt)
-                                historyNotice = "提示词已复制。"
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("复制提示词")
                         }
                     }
 
@@ -785,15 +779,20 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             shape = RoundedCornerShape(18.dp)
                         ) {
                             Column(
-                                modifier = Modifier.padding(14.dp),
+                                modifier = Modifier
+                                    .padding(14.dp)
+                                    .heightIn(max = 320.dp)
+                                    .verticalScroll(rememberScrollState()),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text("失败原因", fontWeight = FontWeight.Bold, color = Color(0xFF991B1B))
-                                Text(
-                                    text = item.error,
-                                    color = Color(0xFF7F1D1D),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                SelectionContainer {
+                                    Text(
+                                        text = item.error,
+                                        color = Color(0xFF7F1D1D),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
                             }
                         }
                         TextButton(
