@@ -22,6 +22,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -247,7 +248,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var onboardingSessionId by remember { mutableLongStateOf(0L) }
     val runningTasks = remember { mutableStateListOf<String>() }
     var customSaveDirectoryUriString by rememberSaveable { mutableStateOf(prefs.getString("customSaveDirectoryUri", "") ?: "") }
-    val customSaveDirectoryUri = customSaveDirectoryUriString.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+    val customSaveDirectoryUri = customSaveDirectoryUriString.takeIf { it.isNotBlank() }?.let { it.toUri() }
     val saveDirectoryLabel = if (customSaveDirectoryUriString.isNotBlank()) {
         "自定义目录：$customSaveDirectoryUriString"
     } else {

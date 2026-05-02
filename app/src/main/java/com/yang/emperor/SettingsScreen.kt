@@ -22,6 +22,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -150,19 +151,19 @@ private suspend fun loadDeveloperAvatarBitmap(): Bitmap? {
 private fun openDeveloperQQ(context: Context) {
     val qqCardIntent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("mqqapi://card/show_pslcard?src_type=internal&version=1&uin=$DEVELOPER_QQ&card_type=person&source=qrcode")
+        "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=$DEVELOPER_QQ&card_type=person&source=qrcode".toUri()
     ).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     val qqCardFallbackIntent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("mqq://card/show_pslcard?src_type=internal&version=1&uin=$DEVELOPER_QQ&card_type=person&source=qrcode")
+        "mqq://card/show_pslcard?src_type=internal&version=1&uin=$DEVELOPER_QQ&card_type=person&source=qrcode".toUri()
     ).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     val webIntent = Intent(
         Intent.ACTION_VIEW,
-        Uri.parse("https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&authKey=&uin=$DEVELOPER_QQ")
+        "https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&authKey=&uin=$DEVELOPER_QQ".toUri()
     ).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
@@ -179,7 +180,7 @@ private fun openDeveloperQQ(context: Context) {
 }
 
 private fun openImageForgeRepository(context: Context) {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(IMAGEFORGE_REPO_URL)).apply {
+    val intent = Intent(Intent.ACTION_VIEW, IMAGEFORGE_REPO_URL.toUri()).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     runCatching { context.startActivity(intent) }
