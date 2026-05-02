@@ -132,33 +132,33 @@ fun HistoryStatsCard(
     runningCount: Int
 ) {
     ElevatedCard(
-        colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF5F6FF)),
-        shape = RoundedCornerShape(28.dp)
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 18.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            HistoryStatItem(successCount, "处理成功", Color(0xFF16A34A))
-            Box(
-                modifier = Modifier
-                    .height(42.dp)
-                    .border(0.5.dp, Color(0xFFD1D5DB))
+            Text(
+                text = "处理概览",
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
             )
-            HistoryStatItem(failedCount, "处理失败", Color(0xFFDC2626))
-            Box(
-                modifier = Modifier
-                    .height(42.dp)
-                    .border(0.5.dp, Color(0xFFD1D5DB))
-            )
-            HistoryStatItem(runningCount, "处理中", Color(0xFFD97706))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HistoryStatItem(successCount, "成功", Color(0xFF16A34A))
+                HistoryStatItem(failedCount, "失败", Color(0xFFDC2626))
+                HistoryStatItem(runningCount, "处理中", Color(0xFFD97706))
+            }
         }
     }
 }
-
 @Composable
 fun HistoryStatItem(
     count: Int,
@@ -169,12 +169,13 @@ fun HistoryStatItem(
         Text(
             text = count.toString(),
             color = color,
-            fontSize = 22.sp,
+            fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = label,
-            color = Color(0xFF4B5563),
+            color = Color(0xFF6B7280),
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -678,15 +679,8 @@ fun HistoryCard(
                     style = MaterialTheme.typography.bodyMedium
                 )
 
-                if (item.error.isNotBlank()) {
+                if (item.state == "failed" && item.error.isNotBlank()) {
                     val firstErrorLine = item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error
-                    Text(
-                        text = "错误：$firstErrorLine",
-                        color = Color(0xFFE11D48),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
                     Surface(
                         color = Color(0xFFFFF1F2),
                         shape = RoundedCornerShape(16.dp)
@@ -696,10 +690,10 @@ fun HistoryCard(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = item.error,
-                                color = Color(0xFF7F1D1D),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 8,
+                                text = "失败原因：$firstErrorLine",
+                                color = Color(0xFF991B1B),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 4,
                                 overflow = TextOverflow.Ellipsis
                             )
                             TextButton(onClick = onCopyError) {
@@ -707,6 +701,14 @@ fun HistoryCard(
                             }
                         }
                     }
+                }
+
+                if (item.state == "running") {
+                    Text(
+                        text = "任务仍在后台处理，完成后会更新为图片预览。",
+                        color = Color(0xFFD97706),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
 
                 if (!selectionMode && item.state == "success" && item.path.startsWith("content://")) {
@@ -728,6 +730,45 @@ fun HistoryCard(
         }
     }
 }
+@Composable
+fun EmptyHistoryCard() {
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 34.dp, horizontal = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                color = Color(0xFFF3F4F6),
+                shape = RoundedCornerShape(22.dp)
+            ) {
+                Text(
+                    text = "暂无记录",
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    color = Color(0xFF6B7280),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Text(
+                text = "生成或编辑图片后，结果会自动收纳到这里。",
+                color = Color(0xFF9CA3AF),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = "长按记录可进入选择删除。",
+                color = Color(0xFF9CA3AF),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
 @Composable
 fun StatusPill(
     text: String,
