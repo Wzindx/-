@@ -29,6 +29,7 @@ import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -131,10 +132,10 @@ private object ImageForgeBackgroundRunner {
     val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 }
 
-private fun copyTextToClipboard(context: Context, label: String, text: String) {
+private fun copyTextToClipboard(context: Context, label: String, text: String, toastText: String = "已复制到剪贴板") {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
-    Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, toastText, Toast.LENGTH_SHORT).show()
 }
 
 private fun compactErrorMessage(message: String): String {
@@ -163,7 +164,7 @@ private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
     val searchable = (listOf(rootMessage, e.message.orEmpty(), rawStack) + chain.map { it.message.orEmpty() })
         .joinToString("\n")
 
-    val httpCode = Regex("""\b(401|403|404|408|409|422|429|500|502|503|504)\b""")
+    val httpCode = Regex("""\b(401|403|404|408|409|422|429|500|502|503|504|524)\b""")
         .find(searchable)
         ?.value
 
@@ -180,6 +181,7 @@ private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
             "502" -> "网关错误，上游服务异常"
             "503" -> "服务端暂时不可用或正在维护"
             "504" -> "网关超时，上游服务响应过慢"
+            "524" -> "Cloudflare 等待源站超时，通常是中转网关已连到源站但源站 120 秒内未返回结果"
             else -> "HTTP 错误"
         }
         val body = rootMessage.ifBlank { rawStack.lines().firstOrNull { it.isNotBlank() }.orEmpty() }
@@ -233,9 +235,11 @@ private fun readableSaveDirectoryLabel(uriString: String): String {
 
 class MainActivity : ComponentActivity() {
     private val activityTaskScope = ImageForgeBackgroundRunner.scope
+    private var notificationImageUri by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        notificationImageUri = intent?.getStringExtra("image_uri").orEmpty()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 AndroidColor.TRANSPARENT,
@@ -246,13 +250,31 @@ class MainActivity : ComponentActivity() {
                 AndroidColor.rgb(244, 246, 255)
             )
         )
-        setContent { AppTheme { MainScreen(activityTaskScope = activityTaskScope) } }
+        setContent {
+            AppTheme {
+                MainScreen(
+                    activityTaskScope = activityTaskScope,
+                    notificationImageUri = notificationImageUri,
+                    onNotificationImageHandled = { notificationImageUri = "" }
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        notificationImageUri = intent.getStringExtra("image_uri").orEmpty()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun MainScreen(activityTaskScope: CoroutineScope) {
+fun MainScreen(
+    activityTaskScope: CoroutineScope,
+    notificationImageUri: String = "",
+    onNotificationImageHandled: () -> Unit = {}
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { secureConfigPreferences(context) }
 
@@ -359,6 +381,23 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         if (historyNotice.isNotBlank()) {
             delay(5000)
             historyNotice = ""
+        }
+    }
+
+    LaunchedEffect(notificationImageUri, history) {
+        if (notificationImageUri.isNotBlank()) {
+            val target = history.firstOrNull {
+                it.state == "success" && it.path == notificationImageUri
+            }
+            if (target != null) {
+                currentRoute = ScreenRoute.HISTORY
+                previewHistoryItem = target
+                historyNotice = "已打开生成结果。"
+            } else {
+                currentRoute = ScreenRoute.HISTORY
+                historyNotice = "生成结果已保存，请在图片记录中查看。"
+            }
+            onNotificationImageHandled()
         }
     }
 
@@ -718,18 +757,27 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         }
                         if (showPromptInPreview) {
                             Surface(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = {
+                                            copyTextToClipboard(context, "ImageForge Prompt", item.prompt, "描述词已复制")
+                                            historyNotice = "描述词已复制。"
+                                        }
+                                    ),
                                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                SelectionContainer {
-                                    Text(
-                                        text = item.prompt,
-                                        modifier = Modifier.padding(14.dp),
-                                        color = Color(0xFF4B5563),
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
+                                Text(
+                                    text = item.prompt,
+                                    modifier = Modifier
+                                        .padding(14.dp)
+                                        .heightIn(max = 220.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                    color = Color(0xFF4B5563),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
                             }
                         }
                     }
@@ -1243,13 +1291,24 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     StatusCard("保存路径：$saveDirectoryLabel")
                                     if (previewPrompt.isNotBlank()) {
                                         Surface(
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .combinedClickable(
+                                                    onClick = {},
+                                                    onLongClick = {
+                                                        copyTextToClipboard(context, "ImageForge Prompt", previewPrompt, "描述词已复制")
+                                                        status = "描述词已复制。"
+                                                    }
+                                                ),
                                             color = MaterialTheme.colorScheme.surfaceContainerLowest,
                                             shape = RoundedCornerShape(16.dp),
                                             tonalElevation = 0.dp
                                         ) {
                                             Column(
-                                                modifier = Modifier.padding(14.dp),
+                                                modifier = Modifier
+                                                    .padding(14.dp)
+                                                    .heightIn(max = 220.dp)
+                                                    .verticalScroll(rememberScrollState()),
                                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
                                                 Text("提示词", fontWeight = FontWeight.Bold)
@@ -1258,12 +1317,6 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                                     color = Color(0xFF4B5563),
                                                     style = MaterialTheme.typography.bodyMedium
                                                 )
-                                                TextButton(onClick = {
-                                                    copyTextToClipboard(context, "ImageForge Prompt", previewPrompt)
-                                                    status = "提示词已复制。"
-                                                }) {
-                                                    Text("复制提示词")
-                                                }
                                             }
                                         }
                                     }
