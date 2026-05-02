@@ -585,8 +585,9 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
 
     previewHistoryItem?.let { item ->
         var showPromptInPreview by remember(item.time, item.prompt) { mutableStateOf(false) }
-        val previewBitmap by produceState<Bitmap?>(initialValue = null, key1 = item.path) {
-            value = if (item.state == "success" && item.path.startsWith("content://")) {
+        val hasImageUri = item.state == "success" && item.path.startsWith("content://")
+        val previewBitmap by produceState<Bitmap?>(initialValue = null, key1 = item.path, key2 = item.state) {
+            value = if (hasImageUri) {
                 withContext(Dispatchers.IO) {
                     runCatching {
                         context.contentResolver.openInputStream(item.path.toUri())?.use { input ->
@@ -598,35 +599,69 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 null
             }
         }
+        val canUseImageActions = hasImageUri && previewBitmap != null
+        val dialogTitle = when (item.state) {
+            "success" -> "图片预览"
+            "running" -> "处理中"
+            "failed" -> "处理失败"
+            else -> "图片记录"
+        }
 
         AlertDialog(
             onDismissRequest = { previewHistoryItem = null },
-            title = { Text(if (item.state == "success") "图片预览" else "处理失败") },
+            title = { Text(dialogTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (item.state == "success") {
-                        if (previewBitmap != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .background(Color.White)
-                                    .border(1.dp, Color(0xFFD9E1F5), RoundedCornerShape(18.dp))
-                                    .padding(6.dp)
-                            ) {
-                                Image(
-                                    bitmap = previewBitmap!!.asImageBitmap(),
-                                    contentDescription = null,
+                    when (item.state) {
+                        "success" -> {
+                            if (previewBitmap != null) {
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .aspectRatio(previewBitmap!!.width.toFloat() / previewBitmap!!.height.toFloat())
-                                )
+                                        .heightIn(max = 360.dp)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(Color.White)
+                                        .border(1.dp, Color(0xFFD9E1F5), RoundedCornerShape(20.dp))
+                                        .padding(6.dp)
+                                ) {
+                                    Image(
+                                        bitmap = previewBitmap!!.asImageBitmap(),
+                                        contentDescription = "生成图片预览",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(
+                                                (previewBitmap!!.width.toFloat() / previewBitmap!!.height.toFloat())
+                                                    .coerceIn(0.55f, 1.8f)
+                                            )
+                                    )
+                                }
+                                StatusCard("图片已生成，可在此查看、打开或分享。")
+                            } else {
+                                StatusCard("这条记录没有可读取的图片文件，仅保留描述内容。")
                             }
-                        } else {
-                            StatusCard("图片已生成，可通过下方按钮下载、打开或分享。")
                         }
+                        "running" -> {
+                            StatusCard("图片仍在处理中，请稍后刷新或等待完成通知。")
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        "failed" -> {
+                            StatusCard("处理失败，详细原因可复制后排查。")
+                        }
+                    }
 
-                        if (showPromptInPreview && item.prompt.isNotBlank()) {
+                    if (item.model.isNotBlank()) {
+                        Text("模型：${item.model}", fontWeight = FontWeight.Bold)
+                    }
+                    Text("时间：${item.time}", color = Color(0xFF6B7280))
+
+                    if (item.prompt.isNotBlank()) {
+                        Button(
+                            onClick = { showPromptInPreview = !showPromptInPreview },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (showPromptInPreview) "隐藏描述内容" else "查看描述内容")
+                        }
+                        if (showPromptInPreview) {
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -640,14 +675,6 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 )
                             }
                         }
-
-                        Button(
-                            onClick = { showPromptInPreview = !showPromptInPreview },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(if (showPromptInPreview) "隐藏描述内容" else "查看描述内容")
-                        }
-
                         TextButton(
                             onClick = {
                                 copyTextToClipboard(context, "ImageForge Prompt", item.prompt)
@@ -657,54 +684,46 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         ) {
                             Text("复制提示词")
                         }
+                    }
 
+                    if (canUseImageActions) {
                         Button(
                             onClick = {
                                 shareImageFromHistory(context, item.path)
-                                historyNotice = "已打开系统图片处理。"
+                                historyNotice = "已打开系统图片操作。"
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("下载图片 / 打开图片")
+                            Text("打开 / 分享图片")
                         }
+                    }
 
+                    if (item.state == "failed" && item.error.isNotBlank()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color(0xFFFFF1F2),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("失败原因", fontWeight = FontWeight.Bold, color = Color(0xFF991B1B))
+                                Text(
+                                    text = item.error,
+                                    color = Color(0xFF7F1D1D),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
                         TextButton(
                             onClick = {
-                                shareImageFromHistory(context, item.path)
-                                historyNotice = "已打开系统分享。"
+                                copyTextToClipboard(context, "ImageForge Error", item.error)
+                                historyNotice = "错误详情已复制。"
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("分享图片")
-                        }
-                    } else {
-                        Text("模型：${item.model}", fontWeight = FontWeight.Bold)
-                        Text("时间：${item.time}", color = Color(0xFF6B7280))
-                        if (item.prompt.isNotBlank()) {
-                            Button(
-                                onClick = { showPromptInPreview = !showPromptInPreview },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(if (showPromptInPreview) "隐藏描述内容" else "查看描述内容")
-                            }
-                            if (showPromptInPreview) {
-                                Text(item.prompt, color = Color(0xFF4B5563))
-                            }
-                        }
-                        if (item.error.isNotBlank()) {
-                            Text(
-                                text = "错误：${item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error}",
-                                color = Color(0xFFE11D48)
-                            )
-                            TextButton(
-                                onClick = {
-                                    copyTextToClipboard(context, "ImageForge Error", item.error)
-                                    historyNotice = "错误详情已复制。"
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("复制错误详情")
-                            }
+                            Text("复制错误详情")
                         }
                     }
                 }
@@ -1258,16 +1277,12 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             Text("最近生成与编辑的图片", color = Color(0xFF6B7280))
                         }
 
-                        TextButton(
-                            enabled = history.isNotEmpty(),
-                            onClick = {
-                                history = emptyList()
-                                saveHistory(prefs, history)
-                                selectedHistoryKeys.clear()
-                                historyNotice = "已清空全部图片记录。"
-                            }
-                        ) {
-                            Text("清空记录")
+                        if (selectedHistoryKeys.isNotEmpty()) {
+                            StatusPill(
+                                text = "已选 ${selectedHistoryKeys.size}",
+                                bg = Color(0xFFEFF6FF),
+                                fg = Color(0xFF315AA6)
+                            )
                         }
                     }
                 }
@@ -1287,24 +1302,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
 
                 if (history.isEmpty()) {
                     item {
-                        ElevatedCard(
-                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                            shape = RoundedCornerShape(24.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 28.dp, horizontal = 18.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "暂无图片记录",
-                                    color = Color.Gray,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-                        }
+                        EmptyHistoryCard()
                     }
                 } else {
                     items(history.take(30)) { item ->
@@ -1337,8 +1335,10 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             },
                             onPreview = { previewHistoryItem = item },
                             onShare = {
-                                shareImageFromHistory(context, item.path)
-                                historyNotice = "已打开系统分享。"
+                                if (item.state == "success" && item.path.startsWith("content://")) {
+                                    shareImageFromHistory(context, item.path)
+                                    historyNotice = "已打开系统分享。"
+                                }
                             }
                         )
                     }
