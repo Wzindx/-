@@ -1,0 +1,76 @@
+name: One-shot Final Cleanup
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply Kotlin cleanup
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          files = [
+              Path("app/src/main/java/com/yang/emperor/MainActivity.kt"),
+              Path("app/src/main/java/com/yang/emperor/SettingsScreen.kt"),
+              Path("app/src/main/java/com/yang/emperor/OnboardingScreen.kt"),
+          ]
+
+          def add_to_uri_import(text: str) -> str:
+              if ".toUri()" not in text:
+                  return text
+              if "import androidx.core.net.toUri\n" in text:
+                  return text
+              marker = "import androidx.core.content.edit\n"
+              if marker in text:
+                  return text.replace(marker, marker + "import androidx.core.net.toUri\n")
+              return text.replace("import android.net.Uri\n", "import android.net.Uri\nimport androidx.core.net.toUri\n")
+
+          for path in files:
+              text = path.read_text(encoding="utf-8")
+
+              # Resolve Android KTX UseKtx lint warning.
+              text = text.replace("Uri.parse(it)", "it.toUri()")
+              text = re.sub(r'Uri\.parse\(("(?:[^"\\\\]|\\\\.)*")\)', r'\1.toUri()', text)
+              text = text.replace("Uri.parse(IMAGEFORGE_REPO_URL)", "IMAGEFORGE_REPO_URL.toUri()")
+              text = add_to_uri_import(text)
+
+              # Trim excessive blank lines introduced by earlier automated edits.
+              text = re.sub(r'\n{4,}', '\n\n\n', text)
+
+              path.write_text(text, encoding="utf-8")
+
+          # Lightweight structural self-check.
+          for path in files:
+              text = path.read_text(encoding="utf-8")
+              if text.count("{") != text.count("}"):
+                  raise SystemExit(f"Brace count mismatch: {path}")
+              if "Uri.parse(" in text:
+                  raise SystemExit(f"Uri.parse still exists: {path}")
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --short
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git add app/src/main/java/com/yang/emperor/MainActivity.kt app/src/main/java/com/yang/emperor/SettingsScreen.kt app/src/main/java/com/yang/emperor/OnboardingScreen.kt
+          git commit -m "Clean final Kotlin lint warnings"
+          git push
