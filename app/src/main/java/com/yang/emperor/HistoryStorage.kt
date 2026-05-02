@@ -16,7 +16,6 @@ private const val SECURE_CONFIG_PREFS_NAME = "secure_config"
 private const val SECURE_MIGRATED_FROM_V16 = "secureMigratedFromV16"
 private const val HISTORY_KEY = "history"
 private const val MAX_HISTORY_ITEMS = 50
-private const val MAX_HISTORY_ERROR_CHARS = 1_500
 
 fun now(): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
@@ -53,7 +52,7 @@ fun loadHistory(prefs: SharedPreferences): List<HistoryItem> {
                 prompt = prompt,
                 path = item.optString("path"),
                 state = state,
-                error = item.optString("error", "").truncateHistoryError()
+                error = item.optString("error", "")
             )
         }
     }.getOrElse {
@@ -72,7 +71,7 @@ fun saveHistory(prefs: SharedPreferences, items: List<HistoryItem>) {
                 .put("prompt", item.prompt)
                 .put("path", item.path)
                 .put("state", item.state.ifBlank { "success" })
-                .put("error", item.error.truncateHistoryError())
+                .put("error", item.error)
         )
     }
     prefs.edit { putString(HISTORY_KEY, arr.toString()) }
@@ -120,8 +119,4 @@ private fun migrateLegacyConfigIfNeeded(
     legacyPrefs.edit {
         keys.forEach { key -> remove(key) }
     }
-}
-private fun String.truncateHistoryError(): String {
-    if (length <= MAX_HISTORY_ERROR_CHARS) return this
-    return take(MAX_HISTORY_ERROR_CHARS) + "\n...（错误信息过长，已截断）"
 }
