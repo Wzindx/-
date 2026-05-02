@@ -464,7 +464,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 imageBytes = result
                 previewPrompt = task.prompt
                 val savedResult = runCatching {
-                    saveToGallery(context, result, task.outputFormat, customSaveDirectoryUri)
+                    saveImageToAppFiles(context, result, task.outputFormat)
                 }
                 val savedUri = savedResult.getOrNull().orEmpty()
                 previewSavedPath = savedUri
@@ -476,11 +476,11 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         } else it
                     }
                     saveHistory(prefs, history)
-                    historyNotice = "后台任务完成，已保存到相册。"
+                    historyNotice = "后台任务完成，已保存到应用记录；需要相册文件时请手动点击保存。"
                     notifyImageReady(context, savedUri)
                 } else {
                     val saveError = savedResult.exceptionOrNull()
-                    val detailedError = "图片生成成功，但保存图片文件失败：${saveError?.message ?: "未获得可读取的图片 URI"}"
+                    val detailedError = "图片生成成功，但写入应用内部图片记录失败：${saveError?.message ?: "未获得可读取的图片 URI"}"
                     history = history.map {
                         if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
                             it.copy(path = "图片文件缺失", state = "failed", error = detailedError)
