@@ -687,21 +687,14 @@ fun HistoryCard(
                         color = Color(0xFFFFF1F2),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Column(
+                        Text(
+                            text = "失败原因：$firstErrorLine",
                             modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "失败原因：$firstErrorLine",
-                                color = Color(0xFF991B1B),
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            TextButton(onClick = onCopyError) {
-                                Text("复制错误详情")
-                            }
-                        }
+                            color = Color(0xFF991B1B),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
@@ -713,39 +706,7 @@ fun HistoryCard(
                     )
                 }
 
-                if (!selectionMode && item.state == "success" && item.path.startsWith("content://")) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            onClick = onOpen,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Color(0xFFEFF6FF))
-                                .padding(horizontal = 8.dp)
-                        ) {
-                            Text("打开", color = Color(0xFF1D4ED8), fontWeight = FontWeight.SemiBold)
-                        }
-                        TextButton(
-                            onClick = onSave,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Color(0xFFE0F2FE))
-                                .padding(horizontal = 8.dp)
-                        ) {
-                            Text("保存", color = Color(0xFF0369A1), fontWeight = FontWeight.SemiBold)
-                        }
-                        TextButton(
-                            onClick = onShare,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Color(0xFFEDE9FE))
-                                .padding(horizontal = 8.dp)
-                        ) {
-                            Text("分享", color = Color(0xFF4C1D95), fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
+
             }
         }
     }
