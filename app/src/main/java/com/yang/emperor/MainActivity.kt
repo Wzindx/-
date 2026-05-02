@@ -1417,10 +1417,15 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 }
                             },
                             onDelete = {
+                                val removedPrivateImage = deleteAppPrivateImageFromHistory(context, item.path)
                                 history = history.filterNot { it.time == item.time && it.prompt == item.prompt }
                                 saveHistory(prefs, history)
                                 selectedHistoryKeys.remove(itemKey)
-                                historyNotice = "已删除该条图片记录。"
+                                historyNotice = if (removedPrivateImage) {
+                                    "已删除该条记录和应用内图片副本。"
+                                } else {
+                                    "已删除该条图片记录。"
+                                }
                             },
                             onCopyError = {
                                 copyTextToClipboard(context, "ImageForge Error", item.error)
@@ -1474,10 +1479,18 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     Surface(
                         onClick = {
                             val keys = selectedHistoryKeys.toSet()
+                            val removedItems = history.filter { "${it.time}|${it.prompt}" in keys }
+                            val removedPrivateImageCount = removedItems.count {
+                                deleteAppPrivateImageFromHistory(context, it.path)
+                            }
                             history = history.filterNot { "${it.time}|${it.prompt}" in keys }
                             saveHistory(prefs, history)
                             selectedHistoryKeys.clear()
-                            historyNotice = "已删除选中的图片记录。"
+                            historyNotice = if (removedPrivateImageCount > 0) {
+                                "已删除选中的图片记录，并清理 $removedPrivateImageCount 张应用内图片副本。"
+                            } else {
+                                "已删除选中的图片记录。"
+                            }
                         },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
