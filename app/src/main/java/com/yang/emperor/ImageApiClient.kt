@@ -3,13 +3,15 @@ package com.yang.emperor
 import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.EOFException
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 
 private const val CONNECT_TIMEOUT_MS = 30_000
 private const val READ_TIMEOUT_MS = 180_000
-private const val MAX_ERROR_BODY_CHARS = 4_000
+private const val MAX_ERROR_BODY_CHARS = 20_000
 
 fun endpoint(baseUrl: String, path: String): String {
     val normalizedBaseUrl = baseUrl.trim().trimEnd('/')
@@ -208,8 +210,8 @@ fun callEditResponses(
 }
 
 fun parseImageResponse(conn: HttpURLConnection): ByteArray {
-    val code = conn.responseCode
-    val text = readResponseText(conn, code)
+    val code = readResponseCode(conn)
+    val text = readResponseTextSafely(conn, code)
     if (code !in 200..299) error("HTTP $code: ${text.truncateForError()}")
 
     val data = JSONObject(text).optJSONArray("data") ?: error("响应缺少 data")
@@ -225,8 +227,8 @@ fun parseImageResponse(conn: HttpURLConnection): ByteArray {
 }
 
 fun parseResponsesImageResponse(conn: HttpURLConnection): ByteArray {
-    val code = conn.responseCode
-    val text = readResponseText(conn, code)
+    val code = readResponseCode(conn)
+    val text = readResponseTextSafely(conn, code)
     if (code !in 200..299) error("HTTP $code: ${text.truncateForError()}")
 
     val output = JSONObject(text).optJSONArray("output") ?: error("响应缺少 output")
@@ -269,14 +271,20 @@ fun download(url: String): ByteArray {
     val conn = URL(url).openConnection() as HttpURLConnection
     conn.connectTimeout = CONNECT_TIMEOUT_MS
     conn.readTimeout = READ_TIMEOUT_MS
+    conn.setRequestProperty("Accept", "image/*,*/*")
+    conn.setRequestProperty("Connection", "close")
 
     return try {
-        val code = conn.responseCode
+        val code = readResponseCode(conn, "图片下载")
         if (code !in 200..299) {
-            val errorText = readResponseText(conn, code).truncateForError()
+            val errorText = readResponseTextSafely(conn, code).truncateForError()
             error("图片下载失败 HTTP $code: $errorText")
         }
-        conn.inputStream.use { it.readBytes() }
+        runCatching {
+            conn.inputStream.use { it.readBytes() }
+        }.getOrElse { e ->
+            throw friendlyNetworkIOException(e, "图片下载响应体读取失败")
+        }
     } finally {
         conn.disconnect()
     }
@@ -295,6 +303,7 @@ private fun openPostConnection(
         setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
         setRequestProperty("Content-Type", contentType)
         setRequestProperty("Accept", "application/json")
+        setRequestProperty("Connection", "close")
     }
 }
 
@@ -304,13 +313,51 @@ private fun writeJsonBody(conn: HttpURLConnection, body: JSONObject) {
     }
 }
 
-private fun readResponseText(conn: HttpURLConnection, code: Int): String {
-    val stream = if (code in 200..299) {
-        conn.inputStream
-    } else {
-        conn.errorStream ?: conn.inputStream
+private fun readResponseCode(conn: HttpURLConnection, stage: String = "图像生成接口"): Int {
+    return runCatching {
+        conn.responseCode
+    }.getOrElse { e ->
+        throw friendlyNetworkIOException(e, "$stage 读取 HTTP 响应头失败")
     }
-    return stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+}
+
+private fun readResponseTextSafely(conn: HttpURLConnection, code: Int): String {
+    return runCatching {
+        val stream = if (code in 200..299) {
+            conn.inputStream
+        } else {
+            conn.errorStream ?: conn.inputStream
+        }
+        stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+    }.getOrElse { e ->
+        throw friendlyNetworkIOException(e, "HTTP $code 响应体读取失败")
+    }
+}
+
+private fun friendlyNetworkIOException(error: Throwable, stage: String): IOException {
+    val chain = generateSequence(error) { it.cause }.toList()
+    val allMessages = chain.joinToString("\n") { cause ->
+        "${cause.javaClass.name}: ${cause.message.orEmpty()}"
+    }
+    val isUnexpectedEnd = allMessages.contains("unexpected end of stream", ignoreCase = true) ||
+        allMessages.contains("EOFException", ignoreCase = true) ||
+        chain.any { it is EOFException }
+
+    val hint = if (isUnexpectedEnd) {
+        "网络连接在读取响应时提前断开。常见原因：服务端/代理/网关提前关闭连接、HTTP/1.1 长连接复用异常、接口返回了空响应，或当前网络不稳定。已为请求加入 Connection: close；请重试，或检查 Base URL、代理与服务端稳定性。"
+    } else {
+        "网络请求失败。请检查网络、Base URL、代理、服务端状态或接口兼容性。"
+    }
+
+    val message = buildString {
+        append(stage)
+        append("\n")
+        append(hint)
+        append("\n\n原始异常链：\n")
+        append(allMessages.ifBlank { "${error.javaClass.name}: ${error.message.orEmpty()}" })
+    }
+
+    return IOException(message, error)
 }
 
 private fun decodeBase64Image(value: String): ByteArray {
