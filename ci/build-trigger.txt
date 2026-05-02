@@ -4,4 +4,4 @@ Reason:
 The previous final HEAD included README.md, and the Build Android APK workflow ignores Markdown-only pushes.
 This non-Markdown marker intentionally triggers CI without changing app runtime behavior.
 
-Triggered at: 2026-05-02 22:58 Asia/Shanghai
+Triggered at: 2026-05-03 01:28 Asia/Shanghai
