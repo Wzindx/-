@@ -230,6 +230,25 @@ fun saveImageToAppFiles(
     ).toString()
 }
 
+fun deleteAppPrivateImageFromHistory(context: Context, imageUri: String): Boolean {
+    if (!imageUri.startsWith("content://")) return false
+
+    val uri = imageUri.toUri()
+    val expectedAuthority = "${context.packageName}.fileprovider"
+    if (uri.authority != expectedAuthority) return false
+
+    val decodedPath = Uri.decode(uri.path.orEmpty())
+    val encodedPath = uri.encodedPath.orEmpty()
+    val isGeneratedImage = decodedPath.contains("/generated_images/") ||
+        encodedPath.contains("generated_images")
+
+    if (!isGeneratedImage) return false
+
+    return runCatching {
+        context.contentResolver.delete(uri, null, null) > 0
+    }.getOrDefault(false)
+}
+
 fun saveToGallery(
     context: Context,
     bytes: ByteArray,
