@@ -54,13 +54,22 @@ fun notifyImageReady(context: Context, imageUri: String) {
 
     val notification = NotificationCompat.Builder(context, IMAGE_NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_gallery)
-        .setContentTitle("图片生成完成")
+        .setContentTitle("ImageForge 图片已完成")
         .setContentText(
             if (imageUri.startsWith("content://")) {
-                "已保存到相册，可点击查看。"
+                "已保存到图片记录，点击可打开系统查看。"
             } else {
-                "可回到应用查看结果。"
+                "已写入图片记录，请回到应用查看结果。"
             }
+        )
+        .setStyle(
+            NotificationCompat.BigTextStyle().bigText(
+                if (imageUri.startsWith("content://")) {
+                    "图片已生成并保存到图片记录。点击通知可用系统应用查看；也可以回到 ImageForge 的图片记录页继续查看描述、打开或分享。"
+                } else {
+                    "图片已生成并写入图片记录。请回到 ImageForge 的图片记录页查看结果。"
+                }
+            )
         )
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
