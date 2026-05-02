@@ -162,8 +162,6 @@ jobs:
 
           BODY_FILE="$RUNNER_TEMP/release-body.md"
           cat > "$BODY_FILE" <<'BODY'
-          # ImageForge __TAG_NAME__
-
           本版本是 ImageForge v2.1 精修版，重点完善图片生成后的结果预览、保存、打开、分享、历史记录回放、后台状态、错误诊断、自定义保存路径与自动构建发布链路。
 
           ## v2.1 优化重点
