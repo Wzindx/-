@@ -184,6 +184,31 @@ private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
 }
 
 
+private fun readableSaveDirectoryLabel(uriString: String): String {
+    if (uriString.isBlank()) return "/storage/emulated/0/Pictures/ImageForge"
+
+    val decoded = Uri.decode(uriString)
+    val primaryMarker = "tree/primary:"
+    val primaryIndex = decoded.indexOf(primaryMarker)
+    if (primaryIndex >= 0) {
+        val relativePath = decoded.substring(primaryIndex + primaryMarker.length).trim('/')
+        return if (relativePath.isBlank()) "/storage/emulated/0" else "/storage/emulated/0/$relativePath"
+    }
+
+    val documentMarker = "document/primary:"
+    val documentIndex = decoded.indexOf(documentMarker)
+    if (documentIndex >= 0) {
+        val relativePath = decoded.substring(documentIndex + documentMarker.length).trim('/')
+        return if (relativePath.isBlank()) "/storage/emulated/0" else "/storage/emulated/0/$relativePath"
+    }
+
+    return decoded
+        .removePrefix("content://com.android.externalstorage.documents/tree/primary%3A")
+        .removePrefix("content://com.android.externalstorage.documents/tree/primary:")
+        .ifBlank { uriString }
+}
+
+
 class MainActivity : ComponentActivity() {
     private val activityTaskScope = ImageForgeBackgroundRunner.scope
 
@@ -249,11 +274,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     val runningTasks = remember { mutableStateListOf<String>() }
     var customSaveDirectoryUriString by rememberSaveable { mutableStateOf(prefs.getString("customSaveDirectoryUri", "") ?: "") }
     val customSaveDirectoryUri = customSaveDirectoryUriString.takeIf { it.isNotBlank() }?.let { it.toUri() }
-    val saveDirectoryLabel = if (customSaveDirectoryUriString.isNotBlank()) {
-        "自定义目录：$customSaveDirectoryUriString"
-    } else {
-        "系统相册 / Pictures/ImageForge"
-    }
+    val saveDirectoryLabel = readableSaveDirectoryLabel(customSaveDirectoryUriString)
 
     BackHandler(enabled = !showOnboarding && selectedHistoryKeys.isNotEmpty()) {
         selectedHistoryKeys.clear()
@@ -556,36 +577,135 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     }
 
     previewHistoryItem?.let { item ->
+        var showPromptInPreview by remember(item.time, item.prompt) { mutableStateOf(false) }
+        val previewBitmap by produceState<Bitmap?>(initialValue = null, key1 = item.path) {
+            value = if (item.state == "success" && item.path.startsWith("content://")) {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(item.path.toUri())?.use { input ->
+                            BitmapFactory.decodeStream(input)
+                        }
+                    }.getOrNull()
+                }
+            } else {
+                null
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { previewHistoryItem = null },
-            title = { Text("图片记录详情") },
+            title = { Text(if (item.state == "success") "图片预览" else "处理失败") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("模型：${item.model}", fontWeight = FontWeight.Bold)
-                    Text("类型：${if (item.mode == "edit") "图生图 / 编辑" else "文生图"}")
-                    Text("时间：${item.time}")
-                    Text("状态：${when (item.state) { "running" -> "处理中"; "failed" -> "处理失败"; else -> "处理成功" }}")
-                    if (item.prompt.isNotBlank()) {
-                        Text("提示词：", fontWeight = FontWeight.Bold)
-                        Text(item.prompt, color = Color(0xFF4B5563))
-                    }
-                    if (item.error.isNotBlank()) {
-                        Text("错误：${item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error}", color = Color(0xFFE11D48))
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (item.state == "success") {
+                        if (previewBitmap != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Color.White)
+                                    .border(1.dp, Color(0xFFD9E1F5), RoundedCornerShape(18.dp))
+                                    .padding(6.dp)
+                            ) {
+                                Image(
+                                    bitmap = previewBitmap!!.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(previewBitmap!!.width.toFloat() / previewBitmap!!.height.toFloat())
+                                )
+                            }
+                        } else {
+                            StatusCard("图片已生成，可通过下方按钮下载、打开或分享。")
+                        }
+
+                        if (showPromptInPreview && item.prompt.isNotBlank()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text(
+                                    text = item.prompt,
+                                    modifier = Modifier.padding(14.dp),
+                                    color = Color(0xFF4B5563),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { showPromptInPreview = !showPromptInPreview },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (showPromptInPreview) "隐藏描述内容" else "查看描述内容")
+                        }
+
+                        TextButton(
+                            onClick = {
+                                copyTextToClipboard(context, "ImageForge Prompt", item.prompt)
+                                status = "提示词已复制。"
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("复制提示词")
+                        }
+
+                        Button(
+                            onClick = {
+                                shareImageFromHistory(context, item.path)
+                                status = "已打开系统图片处理。"
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("下载图片 / 打开图片")
+                        }
+
+                        TextButton(
+                            onClick = {
+                                shareImageFromHistory(context, item.path)
+                                status = "已打开系统分享。"
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("分享图片")
+                        }
                     } else {
-                        Text("保存路径：${item.path}", color = Color(0xFF6B7280))
+                        Text("模型：${item.model}", fontWeight = FontWeight.Bold)
+                        Text("时间：${item.time}", color = Color(0xFF6B7280))
+                        if (item.prompt.isNotBlank()) {
+                            Button(
+                                onClick = { showPromptInPreview = !showPromptInPreview },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (showPromptInPreview) "隐藏描述内容" else "查看描述内容")
+                            }
+                            if (showPromptInPreview) {
+                                Text(item.prompt, color = Color(0xFF4B5563))
+                            }
+                        }
+                        if (item.error.isNotBlank()) {
+                            Text(
+                                text = "错误：${item.error.lines().firstOrNull { it.isNotBlank() } ?: item.error}",
+                                color = Color(0xFFE11D48)
+                            )
+                            TextButton(
+                                onClick = {
+                                    copyTextToClipboard(context, "ImageForge Error", item.error)
+                                    status = "错误详情已复制。"
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("复制错误详情")
+                            }
+                        }
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { previewHistoryItem = null }) { Text("关闭") }
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    copyTextToClipboard(context, "ImageForge Prompt", item.prompt)
-                }) {
-                    Text("复制提示词")
-                }
-            },
+            dismissButton = {},
             shape = RoundedCornerShape(24.dp)
         )
     }
@@ -696,12 +816,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 settingsNotice = "已清除接口配置、密钥和图片记录，请重新填写接口设置。"
                 currentRoute = ScreenRoute.SETTINGS
             },
-            onShowOnboarding = {
-                currentRoute = ScreenRoute.SETTINGS
-                onboardingReturnRoute = ScreenRoute.SETTINGS.name
-                onboardingSessionId = System.nanoTime()
-                showOnboarding = true
-            },
+            onShowOnboarding = {},
             onSave = {
                 prefs.edit {
                     putString("baseUrl", baseUrl.trim())
@@ -914,12 +1029,66 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 Text(if (isReadingReferenceImage) "读取参考图..." else "生成图像")
                             }
 
-                            ConfigEntryCard(
-                                title = "接口与模型",
-                                primary = apiMode.label,
-                                secondary = "模型：${if (selectedImage != null) editModel else generateModel}",
-                                onClick = { showModelSheet = true }
-                            )
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                shape = RoundedCornerShape(20.dp),
+                                tonalElevation = 1.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    SectionTitle("接口与模型", "首页直接调整，修改后立即保存")
+                                    AppDropdownField(
+                                        title = "接口模式",
+                                        selected = apiMode.label,
+                                        options = ApiMode.entries.map { it.label },
+                                        onSelected = { label ->
+                                            ApiMode.entries.firstOrNull { it.label == label }?.let {
+                                                apiMode = it
+                                                prefs.edit { putString("apiMode", it.value) }
+                                                status = "接口模式已保存。"
+                                            }
+                                        }
+                                    )
+                                    AppEditableDropdownField(
+                                        title = if (selectedImage != null) "图生图模型 ID" else "文生图模型 ID",
+                                        value = if (selectedImage != null) customEditModel else customGenerateModel,
+                                        options = imageModels,
+                                        placeholder = "输入或选择模型 ID",
+                                        onValueChange = { value ->
+                                            if (selectedImage != null) {
+                                                customEditModel = value
+                                                editModel = value
+                                                prefs.edit { putString("editModel", value.trim()) }
+                                            } else {
+                                                customGenerateModel = value
+                                                generateModel = value
+                                                prefs.edit {
+                                                    putString("generateModel", value.trim())
+                                                    putString("model", value.trim())
+                                                }
+                                            }
+                                        },
+                                        onSelected = { value ->
+                                            if (selectedImage != null) {
+                                                customEditModel = value
+                                                editModel = value
+                                                prefs.edit { putString("editModel", value.trim()) }
+                                            } else {
+                                                customGenerateModel = value
+                                                generateModel = value
+                                                prefs.edit {
+                                                    putString("generateModel", value.trim())
+                                                    putString("model", value.trim())
+                                                }
+                                            }
+                                            status = "模型已保存。"
+                                        }
+                                    )
+                                }
+                            }
 
                             ConfigEntryCard(
                                 title = "生成参数",
