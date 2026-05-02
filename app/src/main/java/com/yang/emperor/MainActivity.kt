@@ -418,23 +418,32 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 }
                 imageBytes = result
                 previewPrompt = task.prompt
-                val savedUri = runCatching {
+                val savedResult = runCatching {
                     saveToGallery(context, result, task.outputFormat, customSaveDirectoryUri)
-                }.getOrElse { "未下载" }
+                }
+                val savedUri = savedResult.getOrNull().orEmpty()
                 previewSavedPath = savedUri
 
-                history = history.map {
-                    if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
-                        it.copy(path = savedUri, state = "success", error = "")
-                    } else it
-                }
-                saveHistory(prefs, history)
-                historyNotice = if (savedUri.startsWith("content://")) {
-                    "后台任务完成，已保存到相册。"
+                if (savedUri.startsWith("content://")) {
+                    history = history.map {
+                        if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
+                            it.copy(path = savedUri, state = "success", error = "")
+                        } else it
+                    }
+                    saveHistory(prefs, history)
+                    historyNotice = "后台任务完成，已保存到相册。"
+                    notifyImageReady(context, savedUri)
                 } else {
-                    "后台任务完成，可在结果预览中查看或下载。"
+                    val saveError = savedResult.exceptionOrNull()
+                    val detailedError = "图片生成成功，但保存图片文件失败：${saveError?.message ?: "未获得可读取的图片 URI"}"
+                    history = history.map {
+                        if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
+                            it.copy(path = "图片文件缺失", state = "failed", error = detailedError)
+                        } else it
+                    }
+                    saveHistory(prefs, history)
+                    historyNotice = detailedError
                 }
-                notifyImageReady(context, savedUri)
             } catch (e: Exception) {
                 val detailedError = detailedTaskErrorMessage(e, task)
                 history = history.map {
@@ -687,14 +696,40 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     }
 
                     if (canUseImageActions) {
-                        Button(
-                            onClick = {
-                                shareImageFromHistory(context, item.path)
-                                historyNotice = "已打开系统图片操作。"
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("打开 / 分享图片")
+                            Button(
+                                onClick = {
+                                    historyNotice = if (openImageFromHistory(context, item.path)) "已打开图片。" else "图片打开失败。"
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("打开")
+                            }
+                            TextButton(
+                                onClick = {
+                                    val saved = runCatching {
+                                        saveExistingImageToGallery(context, item.path, customSaveDirectoryUri)
+                                    }.getOrElse {
+                                        historyNotice = "保存失败：${it.message ?: "图片无法读取"}"
+                                        return@TextButton
+                                    }
+                                    historyNotice = "已保存到相册：$saved"
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("保存")
+                            }
+                            TextButton(
+                                onClick = {
+                                    historyNotice = if (shareImageFromHistory(context, item.path)) "已打开系统分享。" else "分享失败。"
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("分享")
+                            }
                         }
                     }
 
@@ -1049,8 +1084,8 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                             background = background
                                         )
                                         startBackgroundTask(task)
-                                        historyNotice = "已提交后台生成任务，可继续创建新任务。"
-                                        currentRoute = ScreenRoute.HISTORY
+                                        historyNotice = "已提交后台生成任务，结果会保留在当前页面预览；图片记录仅作为归档入口。"
+
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -1199,9 +1234,14 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     ) {
                                         Button(
                                             onClick = {
-                                                val saved = saveToGallery(context, bytes, outputFormat, customSaveDirectoryUri)
-                                                previewSavedPath = saved
-                                                status = "已保存到相册：$saved"
+                                                runCatching {
+                                                    saveToGallery(context, bytes, outputFormat, customSaveDirectoryUri)
+                                                }.onSuccess { saved ->
+                                                    previewSavedPath = saved
+                                                    status = "已保存到相册：$saved"
+                                                }.onFailure {
+                                                    status = "保存失败：${it.message ?: "图片无法写入"}"
+                                                }
                                             },
                                             modifier = Modifier.weight(1f)
                                         ) {
@@ -1212,10 +1252,19 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                                 val pathForShare = if (previewSavedPath.startsWith("content://")) {
                                                     previewSavedPath
                                                 } else {
-                                                    saveToGallery(context, bytes, outputFormat, customSaveDirectoryUri).also { previewSavedPath = it }
+                                                    runCatching {
+                                                        saveToGallery(context, bytes, outputFormat, customSaveDirectoryUri)
+                                                    }.onSuccess { previewSavedPath = it }
+                                                        .getOrElse {
+                                                            status = "分享失败：${it.message ?: "图片无法保存"}"
+                                                            return@TextButton
+                                                        }
                                                 }
-                                                shareImageFromHistory(context, pathForShare)
-                                                status = "已打开系统分享。"
+                                                status = if (shareImageFromHistory(context, pathForShare)) {
+                                                    "已打开系统分享。"
+                                                } else {
+                                                    "分享失败，请检查图片文件权限。"
+                                                }
                                             },
                                             modifier = Modifier.weight(1f)
                                         ) {
@@ -1334,10 +1383,25 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 historyNotice = "错误详情已复制。"
                             },
                             onPreview = { previewHistoryItem = item },
+                            onOpen = {
+                                if (item.state == "success" && item.path.startsWith("content://")) {
+                                    historyNotice = if (openImageFromHistory(context, item.path)) "已打开图片。" else "图片打开失败。"
+                                }
+                            },
+                            onSave = {
+                                if (item.state == "success" && item.path.startsWith("content://")) {
+                                    runCatching {
+                                        saveExistingImageToGallery(context, item.path, customSaveDirectoryUri)
+                                    }.onSuccess {
+                                        historyNotice = "已保存到相册：$it"
+                                    }.onFailure {
+                                        historyNotice = "保存失败：${it.message ?: "图片无法读取"}"
+                                    }
+                                }
+                            },
                             onShare = {
                                 if (item.state == "success" && item.path.startsWith("content://")) {
-                                    shareImageFromHistory(context, item.path)
-                                    historyNotice = "已打开系统分享。"
+                                    historyNotice = if (shareImageFromHistory(context, item.path)) "已打开系统分享。" else "分享失败。"
                                 }
                             }
                         )
