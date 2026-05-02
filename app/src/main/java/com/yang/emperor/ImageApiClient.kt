@@ -6,12 +6,16 @@ import org.json.JSONObject
 import java.io.EOFException
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.UUID
 
 private const val CONNECT_TIMEOUT_MS = 30_000
 private const val READ_TIMEOUT_MS = 180_000
 private const val MAX_ERROR_BODY_CHARS = 20_000
+private const val MAX_NETWORK_ATTEMPTS = 3
+private const val RETRY_DELAY_MS = 800L
 
 fun endpoint(baseUrl: String, path: String): String {
     val normalizedBaseUrl = baseUrl.trim().trimEnd('/')
@@ -48,12 +52,14 @@ fun callGenerate(
         .put("size", size)
         .put("quality", quality)
 
-    val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey)
-    return try {
-        writeJsonBody(conn, body)
-        parseImageResponse(conn)
-    } finally {
-        conn.disconnect()
+    return withNetworkRetries("文生图请求") {
+        val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey)
+        try {
+            writeJsonBody(conn, body)
+            parseImageResponse(conn)
+        } finally {
+            conn.disconnect()
+        }
     }
 }
 
@@ -73,41 +79,43 @@ fun callEdit(
     require(prompt.isNotBlank()) { "请填写编辑指令" }
     val sourceImageBytes = requireNotNull(imageBytes) { "无法读取参考图，请重新选择图片后再试" }
 
-    val boundary = "----AndroidBoundary${UUID.randomUUID()}"
-    val conn = openPostConnection(
-        url = endpoint(baseUrl, "/images/edits"),
-        apiKey = apiKey,
-        contentType = "multipart/form-data; boundary=$boundary"
-    )
+    return withNetworkRetries("图生图请求") {
+        val boundary = "----AndroidBoundary${UUID.randomUUID()}"
+        val conn = openPostConnection(
+            url = endpoint(baseUrl, "/images/edits"),
+            apiKey = apiKey,
+            contentType = "multipart/form-data; boundary=$boundary"
+        )
 
-    return try {
-        conn.outputStream.use { out ->
-            fun writeText(value: String) {
-                out.write(value.toByteArray(Charsets.UTF_8))
-            }
+        try {
+            conn.outputStream.use { out ->
+                fun writeText(value: String) {
+                    out.write(value.toByteArray(Charsets.UTF_8))
+                }
 
-            fun field(name: String, value: String) {
+                fun field(name: String, value: String) {
+                    writeText("--$boundary\r\n")
+                    writeText("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
+                    writeText("$value\r\n")
+                }
+
+                field("model", model.trim())
+                field("prompt", prompt)
+                field("size", size)
+                field("quality", quality)
+                field("output_format", outputFormat)
+                if (background.isNotBlank()) field("background", background)
+
                 writeText("--$boundary\r\n")
-                writeText("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
-                writeText("$value\r\n")
+                writeText("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r\n")
+                writeText("Content-Type: image/png\r\n\r\n")
+                out.write(sourceImageBytes)
+                writeText("\r\n--$boundary--\r\n")
             }
-
-            field("model", model.trim())
-            field("prompt", prompt)
-            field("size", size)
-            field("quality", quality)
-            field("output_format", outputFormat)
-            if (background.isNotBlank()) field("background", background)
-
-            writeText("--$boundary\r\n")
-            writeText("Content-Disposition: form-data; name=\"image\"; filename=\"image.png\"\r\n")
-            writeText("Content-Type: image/png\r\n\r\n")
-            out.write(sourceImageBytes)
-            writeText("\r\n--$boundary--\r\n")
+            parseImageResponse(conn)
+        } finally {
+            conn.disconnect()
         }
-        parseImageResponse(conn)
-    } finally {
-        conn.disconnect()
     }
 }
 
@@ -141,12 +149,14 @@ fun callEditGenerationsCompat(
         .put("image", inputImageDataUrl)
         .put("reference_image", inputImageDataUrl)
 
-    val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey)
-    return try {
-        writeJsonBody(conn, body)
-        parseImageResponse(conn)
-    } finally {
-        conn.disconnect()
+    return withNetworkRetries("兼容模式图生图请求") {
+        val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey)
+        try {
+            writeJsonBody(conn, body)
+            parseImageResponse(conn)
+        } finally {
+            conn.disconnect()
+        }
     }
 }
 
@@ -200,12 +210,14 @@ fun callEditResponses(
         .put("tools", JSONArray().put(tool))
         .put("tool_choice", "required")
 
-    val conn = openPostConnection(endpoint(baseUrl, "/responses"), apiKey)
-    return try {
-        writeJsonBody(conn, body)
-        parseResponsesImageResponse(conn)
-    } finally {
-        conn.disconnect()
+    return withNetworkRetries("Responses 图像请求") {
+        val conn = openPostConnection(endpoint(baseUrl, "/responses"), apiKey)
+        try {
+            writeJsonBody(conn, body)
+            parseResponsesImageResponse(conn)
+        } finally {
+            conn.disconnect()
+        }
     }
 }
 
@@ -268,26 +280,88 @@ fun parseResponsesImageResponse(conn: HttpURLConnection): ByteArray {
 }
 
 fun download(url: String): ByteArray {
-    val conn = URL(url).openConnection() as HttpURLConnection
-    conn.connectTimeout = CONNECT_TIMEOUT_MS
-    conn.readTimeout = READ_TIMEOUT_MS
-    conn.setRequestProperty("Accept", "image/*,*/*")
-    conn.setRequestProperty("Connection", "close")
+    return withNetworkRetries("图片下载") {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = CONNECT_TIMEOUT_MS
+        conn.readTimeout = READ_TIMEOUT_MS
+        conn.setRequestProperty("Accept", "image/*,*/*")
+        conn.setRequestProperty("Connection", "close")
 
-    return try {
-        val code = readResponseCode(conn, "图片下载")
-        if (code !in 200..299) {
-            val errorText = readResponseTextSafely(conn, code).truncateForError()
-            error("图片下载失败 HTTP $code: $errorText")
+        try {
+            val code = readResponseCode(conn, "图片下载")
+            if (code !in 200..299) {
+                val errorText = readResponseTextSafely(conn, code).truncateForError()
+                error("图片下载失败 HTTP $code: $errorText")
+            }
+            runCatching {
+                conn.inputStream.use { it.readBytes() }
+            }.getOrElse { e ->
+                throw friendlyNetworkIOException(e, "图片下载响应体读取失败")
+            }
+        } finally {
+            conn.disconnect()
         }
-        runCatching {
-            conn.inputStream.use { it.readBytes() }
-        }.getOrElse { e ->
-            throw friendlyNetworkIOException(e, "图片下载响应体读取失败")
-        }
-    } finally {
-        conn.disconnect()
     }
+}
+
+private fun <T> withNetworkRetries(operationName: String, block: () -> T): T {
+    var lastError: IOException? = null
+
+    for (attempt in 1..MAX_NETWORK_ATTEMPTS) {
+        try {
+            return block()
+        } catch (e: IOException) {
+            lastError = e
+            if (attempt >= MAX_NETWORK_ATTEMPTS || !isRetryableNetworkFailure(e)) {
+                if (attempt > 1) {
+                    throw retryExhaustedIOException(operationName, attempt, e)
+                }
+                throw e
+            }
+
+            runCatching {
+                Thread.sleep(RETRY_DELAY_MS * attempt)
+            }
+        }
+    }
+
+    throw retryExhaustedIOException(
+        operationName = operationName,
+        attempts = MAX_NETWORK_ATTEMPTS,
+        error = lastError ?: IOException("未知网络错误")
+    )
+}
+
+private fun retryExhaustedIOException(operationName: String, attempts: Int, error: IOException): IOException {
+    val message = buildString {
+        append(operationName)
+        append("失败，已自动重试 ")
+        append((attempts - 1).coerceAtLeast(0))
+        append(" 次仍未成功。\n")
+        append("这通常表示当前 VPN/代理节点、网关转发、Base URL 中转服务或目标接口在读取响应时不稳定。")
+        append("建议切换代理节点、关闭/开启代理对比测试，或更换更稳定的 Base URL。")
+        append("\n\n最后一次错误：\n")
+        append(error.message.orEmpty())
+    }
+    return IOException(message, error)
+}
+
+private fun isRetryableNetworkFailure(error: Throwable): Boolean {
+    val chain = generateSequence(error) { it.cause }.toList()
+    val allMessages = chain.joinToString("\n") { cause ->
+        "${cause.javaClass.name}: ${cause.message.orEmpty()}"
+    }
+
+    return chain.any { it is EOFException || it is SocketException || it is SocketTimeoutException } ||
+        allMessages.contains("unexpected end of stream", ignoreCase = true) ||
+        allMessages.contains("EOFException", ignoreCase = true) ||
+        allMessages.contains("读取 HTTP 响应头失败", ignoreCase = true) ||
+        allMessages.contains("connection reset", ignoreCase = true) ||
+        allMessages.contains("socket closed", ignoreCase = true) ||
+        allMessages.contains("broken pipe", ignoreCase = true) ||
+        allMessages.contains("premature end", ignoreCase = true) ||
+        allMessages.contains("stream was reset", ignoreCase = true) ||
+        allMessages.contains("timeout", ignoreCase = true)
 }
 
 private fun openPostConnection(
@@ -344,9 +418,9 @@ private fun friendlyNetworkIOException(error: Throwable, stage: String): IOExcep
         chain.any { it is EOFException }
 
     val hint = if (isUnexpectedEnd) {
-        "网络连接在读取响应时提前断开。常见原因：服务端/代理/网关提前关闭连接、HTTP/1.1 长连接复用异常、接口返回了空响应，或当前网络不稳定。已为请求加入 Connection: close；请重试，或检查 Base URL、代理与服务端稳定性。"
+        "网络连接在读取响应时提前断开。常见原因：VPN/代理节点或中转网关提前关闭连接、Base URL 服务不稳定、HTTP/1.1 长连接复用异常、接口返回空响应，或当前网络抖动。App 已使用 Connection: close 并会对这类断流自动重试；如果仍失败，请切换代理节点、关闭/开启代理对比测试，或更换更稳定的 Base URL。"
     } else {
-        "网络请求失败。请检查网络、Base URL、代理、服务端状态或接口兼容性。"
+        "网络请求失败。请检查网络、Base URL、代理节点、网关转发、服务端状态或接口兼容性。"
     }
 
     val message = buildString {
