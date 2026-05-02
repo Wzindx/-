@@ -312,13 +312,6 @@ internal fun SettingsScreen(
                     }
 
                     TextButton(
-                        onClick = onShowOnboarding,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("再来一次引导")
-                    }
-
-                    TextButton(
                         onClick = onClearConfig,
                         modifier = Modifier.fillMaxWidth()
                     ) {
