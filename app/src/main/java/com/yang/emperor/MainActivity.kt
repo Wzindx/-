@@ -1305,18 +1305,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                         }
                                         TextButton(
                                             onClick = {
-                                                val pathForShare = if (previewSavedPath.startsWith("content://")) {
-                                                    previewSavedPath
-                                                } else {
-                                                    runCatching {
-                                                        saveToGallery(context, bytes, outputFormat, customSaveDirectoryUri)
-                                                    }.onSuccess { previewSavedPath = it }
-                                                        .getOrElse {
-                                                            status = "分享失败：${it.message ?: "图片无法保存"}"
-                                                            return@TextButton
-                                                        }
-                                                }
-                                                status = if (shareImageFromHistory(context, pathForShare)) {
+                                                status = if (shareImageBytes(context, bytes, outputFormat)) {
                                                     "已打开系统分享。"
                                                 } else {
                                                     "分享失败，请检查图片文件权限。"
