@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.net.toUri
+import java.io.IOException
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -219,22 +220,42 @@ private fun saveToCustomDirectory(
     directoryUri: Uri
 ): String {
     val resolver = context.contentResolver
-    val imageUri = DocumentsContract.createDocument(
-        resolver,
-        directoryUri,
-        mimeType,
-        name
-    ) ?: error("无法在所选目录创建图片文件，请重新选择保存路径")
 
+    var createdImageUri: Uri? = null
     try {
-        resolver.openOutputStream(imageUri)?.use { output ->
+        val targetDirectoryUri = if (DocumentsContract.isTreeUri(directoryUri)) {
+            val treeDocumentId = DocumentsContract.getTreeDocumentId(directoryUri)
+            DocumentsContract.buildDocumentUriUsingTree(directoryUri, treeDocumentId)
+        } else {
+            directoryUri
+        }
+
+        val imageUri = DocumentsContract.createDocument(
+            resolver,
+            targetDirectoryUri,
+            mimeType,
+            name
+        ) ?: throw IOException("无法在自定义保存目录中创建图片文件：$directoryUri")
+        createdImageUri = imageUri
+
+        resolver.openOutputStream(imageUri, "w")?.use { output ->
             output.write(bytes)
             output.flush()
-        } ?: error("无法打开所选目录的图片输出流")
+        } ?: throw IOException("无法打开自定义保存目录的图片输出流：$imageUri")
+
         return imageUri.toString()
-    } catch (e: Exception) {
-        runCatching { DocumentsContract.deleteDocument(resolver, imageUri) }
+    } catch (e: SecurityException) {
+        createdImageUri?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+        throw IOException("没有自定义保存目录的写入权限，请重新选择保存目录并授权：$directoryUri", e)
+    } catch (e: IllegalArgumentException) {
+        createdImageUri?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+        throw IOException("自定义保存目录 URI 无效：$directoryUri。请重新选择保存目录。", e)
+    } catch (e: IOException) {
+        createdImageUri?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
         throw e
+    } catch (e: Exception) {
+        createdImageUri?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+        throw IOException("保存到自定义目录失败：$directoryUri", e)
     }
 }
 
