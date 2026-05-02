@@ -20,6 +20,8 @@ import android.provider.MediaStore
 import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
@@ -92,12 +94,52 @@ fun shareImageFromHistory(context: Context, imageUri: String): Boolean {
 
     val uri = imageUri.toUri()
     return try {
-        context.contentResolver.openInputStream(uri)?.close()
+        val mimeType = context.contentResolver.getType(uri) ?: "image/png"
+        val format = when {
+            mimeType.contains("jpeg", ignoreCase = true) || mimeType.contains("jpg", ignoreCase = true) -> "jpg"
+            mimeType.contains("webp", ignoreCase = true) -> "webp"
+            else -> "png"
+        }
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取图片文件")
+        shareImageBytes(context, bytes, format)
+    } catch (e: Exception) {
+        Toast.makeText(context, "分享失败：${e.message ?: "图片无法读取"}", Toast.LENGTH_LONG).show()
+        false
+    }
+}
+
+fun shareImageBytes(context: Context, bytes: ByteArray, format: String): Boolean {
+    return try {
+        require(bytes.isNotEmpty()) { "图片数据为空，无法分享" }
+        val normalizedFormat = normalizeImageFormat(format)
+        val shareDir = File(context.cacheDir, "shared_images").apply {
+            if (!exists()) mkdirs()
+        }
+
+        shareDir.listFiles()?.forEach { oldFile ->
+            if (oldFile.isFile) runCatching { oldFile.delete() }
+        }
+
+        val shareFile = File(
+            shareDir,
+            "imageforge_share_${System.currentTimeMillis()}.${normalizedFormat.extension}"
+        )
+        shareFile.outputStream().use { output ->
+            output.write(bytes)
+            output.flush()
+        }
+
+        val shareUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            shareFile
+        )
+
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = context.contentResolver.getType(uri) ?: "image/*"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newUri(context.contentResolver, "generated_image", uri)
+            type = normalizedFormat.mimeType
+            putExtra(Intent.EXTRA_STREAM, shareUri)
+            clipData = ClipData.newUri(context.contentResolver, "imageforge_shared_image", shareUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
