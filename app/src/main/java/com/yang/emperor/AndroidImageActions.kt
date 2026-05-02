@@ -48,7 +48,7 @@ fun ensureImageNotificationChannel(context: Context) {
 fun notifyImageReady(context: Context, imageUri: String) {
     if (!canPostNotifications(context)) return
 
-    val openIntent = buildOpenImageIntent(context, imageUri)
+    val openIntent = buildOpenImageNotificationIntent(context, imageUri)
     val pendingIntent = PendingIntent.getActivity(
         context,
         IMAGE_NOTIFICATION_ID_BASE,
@@ -58,23 +58,9 @@ fun notifyImageReady(context: Context, imageUri: String) {
 
     val notification = NotificationCompat.Builder(context, IMAGE_NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_gallery)
-        .setContentTitle("ImageForge 图片已完成")
-        .setContentText(
-            if (imageUri.startsWith("content://")) {
-                "已保存到应用记录，点击可打开系统查看。"
-            } else {
-                "已写入图片记录，请回到应用查看结果。"
-            }
-        )
-        .setStyle(
-            NotificationCompat.BigTextStyle().bigText(
-                if (imageUri.startsWith("content://")) {
-                    "图片已生成并保存到 ImageForge 应用记录，不会自动写入相册。点击通知可用系统应用查看；也可以回到图片记录页继续保存或分享。"
-                } else {
-                    "图片已生成并写入图片记录。请回到 ImageForge 的图片记录页查看结果。"
-                }
-            )
-        )
+        .setContentTitle("生成完成")
+        .setContentText("点击查看图片")
+        .setStyle(NotificationCompat.BigTextStyle().bigText("图片已保存到应用记录，点击回到 ImageForge 查看。"))
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -359,6 +345,15 @@ private fun canPostNotifications(context: Context): Boolean {
             context,
             Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun buildOpenImageNotificationIntent(context: Context, imageUri: String): Intent {
+    return Intent(context, MainActivity::class.java).apply {
+        action = Intent.ACTION_VIEW
+        putExtra("open_generated_image", true)
+        putExtra("image_uri", imageUri)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
 }
 
 private fun buildOpenImageIntent(context: Context, imageUri: String): Intent {
