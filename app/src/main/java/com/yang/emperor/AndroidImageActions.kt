@@ -61,7 +61,7 @@ fun notifyImageReady(context: Context, imageUri: String) {
         .setContentTitle("ImageForge 图片已完成")
         .setContentText(
             if (imageUri.startsWith("content://")) {
-                "已保存到图片记录，点击可打开系统查看。"
+                "已保存到应用记录，点击可打开系统查看。"
             } else {
                 "已写入图片记录，请回到应用查看结果。"
             }
@@ -69,7 +69,7 @@ fun notifyImageReady(context: Context, imageUri: String) {
         .setStyle(
             NotificationCompat.BigTextStyle().bigText(
                 if (imageUri.startsWith("content://")) {
-                    "图片已生成并保存到图片记录。点击通知可用系统应用查看；也可以回到 ImageForge 的图片记录页继续查看描述、打开或分享。"
+                    "图片已生成并保存到 ImageForge 应用记录，不会自动写入相册。点击通知可用系统应用查看；也可以回到图片记录页继续保存或分享。"
                 } else {
                     "图片已生成并写入图片记录。请回到 ImageForge 的图片记录页查看结果。"
                 }
@@ -195,6 +195,39 @@ fun saveExistingImageToGallery(
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
         ?: error("无法读取图片文件")
     return saveToGallery(context, bytes, format, customDirectoryUri)
+}
+
+fun saveImageToAppFiles(
+    context: Context,
+    bytes: ByteArray,
+    format: String
+): String {
+    require(bytes.isNotEmpty()) { "图片数据为空，无法写入应用记录" }
+
+    val normalizedFormat = normalizeImageFormat(format)
+    val generatedDir = File(context.filesDir, "generated_images").apply {
+        if (!exists()) mkdirs()
+    }
+    val imageFile = File(
+        generatedDir,
+        "imageforge_${System.currentTimeMillis()}.${normalizedFormat.extension}"
+    )
+
+    try {
+        imageFile.outputStream().use { output ->
+            output.write(bytes)
+            output.flush()
+        }
+    } catch (e: Exception) {
+        runCatching { imageFile.delete() }
+        throw IOException("无法写入应用内部图片记录", e)
+    }
+
+    return FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        imageFile
+    ).toString()
 }
 
 fun saveToGallery(
