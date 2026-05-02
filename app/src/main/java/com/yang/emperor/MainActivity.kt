@@ -142,6 +142,18 @@ private fun compactErrorMessage(message: String): String {
 
 private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
     val rawStack = e.stackTraceToString()
+    val taskInfo = buildString {
+        appendLine("任务信息：")
+        appendLine("- 模式：${task.mode}")
+        appendLine("- 接口模式：${task.apiMode.label}")
+        appendLine("- Base URL：${task.baseUrl}")
+        appendLine("- 模型：${task.model}")
+        appendLine("- 尺寸：${task.size}")
+        appendLine("- 质量：${task.quality}")
+        appendLine("- 数量：${task.count}")
+        appendLine("- 输出格式：${task.outputFormat}")
+        appendLine("- Prompt：${task.prompt}")
+    }
     val chain = generateSequence(e as Throwable?) { it.cause }.toList()
     val root = chain.lastOrNull() ?: e
     val rootName = root.javaClass.simpleName
@@ -170,17 +182,26 @@ private fun detailedTaskErrorMessage(e: Exception, task: ImageTask): String {
             else -> "HTTP 错误"
         }
         val body = rootMessage.ifBlank { rawStack.lines().firstOrNull { it.isNotBlank() }.orEmpty() }
-        return "HTTP $httpCode：$meaning\n$body\n\n$rawStack"
+        return "HTTP $httpCode：$meaning\n$body\n\n$taskInfo\n完整异常堆栈：\n$rawStack"
     }
 
     val networkHint = when (root) {
         is SocketTimeoutException -> "SocketTimeoutException：请求超时，接口在限定时间内没有返回结果。"
         is UnknownHostException -> "UnknownHostException：无法解析 Base URL 的域名，请检查地址或网络。"
-        is IOException -> "IOException：${rootMessage.ifBlank { "网络或文件读写异常" }}"
+        is IOException -> {
+            if (searchable.contains("unexpected end of stream", ignoreCase = true) ||
+                searchable.contains("EOFException", ignoreCase = true) ||
+                searchable.contains("\\n not found: size=0", ignoreCase = true)
+            ) {
+                "IOException：网络连接在读取响应时提前断开，可能是服务端/代理/网关返回空响应或 HTTP/1.1 连接复用异常。"
+            } else {
+                "IOException：${rootMessage.ifBlank { "网络或文件读写异常" }}"
+            }
+        }
         else -> "$rootName：${rootMessage.ifBlank { "无详细异常消息" }}"
     }
 
-    return "$networkHint\n\n$rawStack"
+    return "$networkHint\n\n$taskInfo\n完整异常堆栈：\n$rawStack"
 }
 
 
@@ -355,6 +376,26 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     }
 
 
+    fun cancelRunningImageTasks() {
+        if (runningTasks.isEmpty()) return
+
+        history = history.map { item ->
+            if (item.state == "running") {
+                item.copy(
+                    path = "已取消",
+                    state = "failed",
+                    error = "用户已取消生成图像。\n\n该任务已从 ImageForge 界面取消；如果请求已经发送到远端服务端，服务端可能仍会短暂处理，但结果不会再覆盖当前记录。"
+                )
+            } else {
+                item
+            }
+        }
+        saveHistory(prefs, history)
+        runningTasks.clear()
+        historyNotice = "已取消生成图像。"
+        status = "已取消生成图像。"
+    }
+
     fun startBackgroundTask(task: ImageTask) {
         activityTaskScope.launch {
             runningTasks.add(task.id)
@@ -416,6 +457,10 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         )
                     }
                 }
+                if (task.id !in runningTasks) {
+                    return@launch
+                }
+
                 imageBytes = result
                 previewPrompt = task.prompt
                 val savedResult = runCatching {
@@ -758,7 +803,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("复制错误详情")
+                            Text("复制完整错误详情")
                         }
                     }
                 }
@@ -1040,8 +1085,13 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             }
 
                             Button(
-                                enabled = prompt.isNotBlank() && isConfigured && !isReadingReferenceImage,
+                                enabled = (runningCount > 0) || (prompt.isNotBlank() && isConfigured && !isReadingReferenceImage),
                                 onClick = {
+                                    if (runningCount > 0) {
+                                        cancelRunningImageTasks()
+                                        return@Button
+                                    }
+
                                     ensureImageNotificationChannel(context)
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                                         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -1096,7 +1146,13 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                     disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                Text(if (isReadingReferenceImage) "读取参考图..." else "生成图像")
+                                Text(
+                                    when {
+                                        isReadingReferenceImage -> "读取参考图..."
+                                        runningCount > 0 -> "取消生成图像"
+                                        else -> "生成图像"
+                                    }
+                                )
                             }
 
                             Surface(
