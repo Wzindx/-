@@ -82,25 +82,75 @@ fun notifyImageReady(context: Context, imageUri: String) {
     )
 }
 
-fun shareImageFromHistory(context: Context, imageUri: String) {
-    if (!imageUri.startsWith("content://")) return
+fun shareImageFromHistory(context: Context, imageUri: String): Boolean {
+    if (!imageUri.startsWith("content://")) {
+        Toast.makeText(context, "没有可分享的图片文件。", Toast.LENGTH_SHORT).show()
+        return false
+    }
 
     val uri = imageUri.toUri()
-    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-        type = "image/*"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        clipData = ClipData.newUri(context.contentResolver, "generated_image", uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
+    return try {
+        context.contentResolver.openInputStream(uri)?.close()
+            ?: error("无法读取图片文件")
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = context.contentResolver.getType(uri) ?: "image/*"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(context.contentResolver, "generated_image", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
 
-    val chooser = Intent.createChooser(shareIntent, "分享图片")
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-    try {
+        val chooser = Intent.createChooser(shareIntent, "分享图片").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         context.startActivity(chooser)
+        true
     } catch (_: ActivityNotFoundException) {
-        // Device has no available share target; ignore to avoid crashing the app.
+        Toast.makeText(context, "没有可用的分享应用。", Toast.LENGTH_SHORT).show()
+        false
+    } catch (e: Exception) {
+        Toast.makeText(context, "分享失败：${e.message ?: "图片无法读取"}", Toast.LENGTH_LONG).show()
+        false
     }
+}
+
+fun openImageFromHistory(context: Context, imageUri: String): Boolean {
+    if (!imageUri.startsWith("content://")) {
+        Toast.makeText(context, "没有可打开的图片文件。", Toast.LENGTH_SHORT).show()
+        return false
+    }
+
+    val uri = imageUri.toUri()
+    return try {
+        context.contentResolver.openInputStream(uri)?.close()
+            ?: error("无法读取图片文件")
+        context.startActivity(buildOpenImageIntent(context, imageUri))
+        true
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, "没有可用的图片查看应用。", Toast.LENGTH_SHORT).show()
+        false
+    } catch (e: Exception) {
+        Toast.makeText(context, "打开失败：${e.message ?: "图片无法读取"}", Toast.LENGTH_LONG).show()
+        false
+    }
+}
+
+fun saveExistingImageToGallery(
+    context: Context,
+    imageUri: String,
+    customDirectoryUri: Uri? = null
+): String {
+    require(imageUri.startsWith("content://")) { "没有可保存的图片文件" }
+    val uri = imageUri.toUri()
+    val mimeType = context.contentResolver.getType(uri).orEmpty()
+    val format = when {
+        mimeType.contains("jpeg", ignoreCase = true) || mimeType.contains("jpg", ignoreCase = true) -> "jpg"
+        mimeType.contains("webp", ignoreCase = true) -> "webp"
+        else -> "png"
+    }
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        ?: error("无法读取图片文件")
+    return saveToGallery(context, bytes, format, customDirectoryUri)
 }
 
 fun saveToGallery(
