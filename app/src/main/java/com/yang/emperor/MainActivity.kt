@@ -257,6 +257,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
     var showModelSheet by remember { mutableStateOf(false) }
     var showParamsSheet by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    var historyNotice by remember { mutableStateOf("") }
     var settingsNotice by remember { mutableStateOf("") }
     var imageBytes by remember { mutableStateOf(null as ByteArray?) }
     var previewPrompt by remember { mutableStateOf("") }
@@ -302,7 +303,6 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             customSaveDirectoryUriString = uri.toString()
             prefs.edit { putString("customSaveDirectoryUri", customSaveDirectoryUriString) }
             settingsNotice = "图片保存路径已更新。"
-            status = "图片保存路径已更新。"
         }
     }
 
@@ -330,6 +330,13 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
         if (status.isNotBlank()) {
             delay(5000)
             status = ""
+        }
+    }
+
+    LaunchedEffect(historyNotice) {
+        if (historyNotice.isNotBlank()) {
+            delay(5000)
+            historyNotice = ""
         }
     }
 
@@ -422,7 +429,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     } else it
                 }
                 saveHistory(prefs, history)
-                status = if (savedUri.startsWith("content://")) {
+                historyNotice = if (savedUri.startsWith("content://")) {
                     "后台任务完成，已保存到相册。"
                 } else {
                     "后台任务完成，可在结果预览中查看或下载。"
@@ -436,7 +443,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                     } else it
                 }
                 saveHistory(prefs, history)
-                status = "后台任务失败：${compactErrorMessage(detailedError)}"
+                historyNotice = "后台任务失败：${compactErrorMessage(detailedError)}"
             } finally {
                 runningTasks.remove(task.id)
             }
@@ -644,7 +651,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         TextButton(
                             onClick = {
                                 copyTextToClipboard(context, "ImageForge Prompt", item.prompt)
-                                status = "提示词已复制。"
+                                historyNotice = "提示词已复制。"
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -654,7 +661,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         Button(
                             onClick = {
                                 shareImageFromHistory(context, item.path)
-                                status = "已打开系统图片处理。"
+                                historyNotice = "已打开系统图片处理。"
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -664,7 +671,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         TextButton(
                             onClick = {
                                 shareImageFromHistory(context, item.path)
-                                status = "已打开系统分享。"
+                                historyNotice = "已打开系统分享。"
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -692,7 +699,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             TextButton(
                                 onClick = {
                                     copyTextToClipboard(context, "ImageForge Error", item.error)
-                                    status = "错误详情已复制。"
+                                    historyNotice = "错误详情已复制。"
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -804,7 +811,16 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
             settingsNotice = settingsNotice,
             onBack = { currentRoute = ScreenRoute.MAIN },
             onClearConfig = {
-                prefs.edit { clear() }
+                prefs.edit {
+                    remove("baseUrl")
+                    remove("apiKey")
+                    remove("apiMode")
+                    remove("generateModel")
+                    remove("editModel")
+                    remove("model")
+                    remove("customSaveDirectoryUri")
+                    remove("onboardingDone")
+                }
                 baseUrl = "https://api.openai.com/v1"
                 apiKey = ""
                 apiMode = ApiMode.IMAGES
@@ -812,8 +828,8 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                 editModel = "gpt-image-2"
                 customGenerateModel = generateModel
                 customEditModel = editModel
-                history = emptyList()
-                settingsNotice = "已清除接口配置、密钥和图片记录，请重新填写接口设置。"
+                customSaveDirectoryUriString = ""
+                settingsNotice = "已清除连接配置信息。"
                 currentRoute = ScreenRoute.SETTINGS
             },
             onShowOnboarding = {},
@@ -1014,7 +1030,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                             background = background
                                         )
                                         startBackgroundTask(task)
-                                        status = "已提交后台生成任务，可继续创建新任务。"
+                                        historyNotice = "已提交后台生成任务，可继续创建新任务。"
                                         currentRoute = ScreenRoute.HISTORY
                                     }
                                 },
@@ -1242,6 +1258,17 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             Text("最近生成与编辑的图片", color = Color(0xFF6B7280))
                         }
 
+                        TextButton(
+                            enabled = history.isNotEmpty(),
+                            onClick = {
+                                history = emptyList()
+                                saveHistory(prefs, history)
+                                selectedHistoryKeys.clear()
+                                historyNotice = "已清空全部图片记录。"
+                            }
+                        ) {
+                            Text("清空记录")
+                        }
                     }
                 }
                 item {
@@ -1250,6 +1277,12 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                         failedCount = history.count { it.state == "failed" },
                         runningCount = history.count { it.state == "running" }
                     )
+                }
+
+                if (historyNotice.isNotBlank()) {
+                    item {
+                        StatusCard(historyNotice)
+                    }
                 }
 
                 if (history.isEmpty()) {
@@ -1296,14 +1329,17 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                                 history = history.filterNot { it.time == item.time && it.prompt == item.prompt }
                                 saveHistory(prefs, history)
                                 selectedHistoryKeys.remove(itemKey)
-                                status = "已删除该条图片记录。"
+                                historyNotice = "已删除该条图片记录。"
                             },
                             onCopyError = {
                                 copyTextToClipboard(context, "ImageForge Error", item.error)
-                                status = "错误详情已复制。"
+                                historyNotice = "错误详情已复制。"
                             },
                             onPreview = { previewHistoryItem = item },
-                            onShare = { shareImageFromHistory(context, item.path) }
+                            onShare = {
+                                shareImageFromHistory(context, item.path)
+                                historyNotice = "已打开系统分享。"
+                            }
                         )
                     }
                 }
@@ -1333,7 +1369,7 @@ fun MainScreen(activityTaskScope: CoroutineScope) {
                             history = history.filterNot { "${it.time}|${it.prompt}" in keys }
                             saveHistory(prefs, history)
                             selectedHistoryKeys.clear()
-                            status = "已删除选中的图片记录。"
+                            historyNotice = "已删除选中的图片记录。"
                         },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)

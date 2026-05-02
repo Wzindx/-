@@ -315,7 +315,7 @@ internal fun SettingsScreen(
                         onClick = onClearConfig,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("清除密钥、配置和历史记录")
+                        Text("清除连接配置信息")
                     }
 
                     if (settingsNotice.isNotBlank()) {
