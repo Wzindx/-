@@ -162,6 +162,51 @@ fun openImageFromHistory(context: Context, imageUri: String): Boolean {
     }
 }
 
+fun cleanupReferenceImageCache(context: Context, maxAgeMillis: Long = 6 * 60 * 60 * 1000L) {
+    val dir = File(context.cacheDir, "reference_images")
+    val now = System.currentTimeMillis()
+    dir.listFiles()?.forEach { file ->
+        if (file.isFile && (maxAgeMillis <= 0L || now - file.lastModified() > maxAgeMillis)) {
+            runCatching { file.delete() }
+        }
+    }
+}
+
+fun clearReferenceImageCache(context: Context) {
+    cleanupReferenceImageCache(context, maxAgeMillis = 0L)
+}
+
+fun cacheReferenceImageBytes(context: Context, uri: Uri): ByteArray {
+    cleanupReferenceImageCache(context)
+
+    val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+        input.readBytes()
+    } ?: throw IOException("无法读取参考图文件，请重新选择图片")
+
+    require(bytes.isNotEmpty()) { "参考图文件为空，请重新选择图片" }
+
+    val cacheDir = File(context.cacheDir, "reference_images").apply {
+        if (!exists()) mkdirs()
+    }
+
+    cacheDir.listFiles()?.forEach { oldFile ->
+        if (oldFile.isFile) runCatching { oldFile.delete() }
+    }
+
+    val cacheFile = File(cacheDir, "reference_${System.currentTimeMillis()}.img")
+    try {
+        cacheFile.outputStream().use { output ->
+            output.write(bytes)
+            output.flush()
+        }
+    } catch (e: Exception) {
+        runCatching { cacheFile.delete() }
+        throw IOException("参考图缓存写入失败，请重新选择图片", e)
+    }
+
+    return cacheFile.inputStream().use { it.readBytes() }
+}
+
 fun saveExistingImageToGallery(
     context: Context,
     imageUri: String,
