@@ -671,6 +671,9 @@ fun MainScreen(
                         selectedImage = null
                         selectedImageBytes = null
                         showReferenceSheet = false
+                        activityTaskScope.launch(Dispatchers.IO) {
+                            clearReferenceImageCache(context)
+                        }
                         status = "已清除参考图，将自动使用文生图模式。"
                     }
                 ) {
