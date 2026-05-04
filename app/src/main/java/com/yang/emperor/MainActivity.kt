@@ -1130,7 +1130,10 @@ fun MainScreen(
 
                             OutlinedTextField(
                                 value = prompt,
-                                onValueChange = { prompt = it },
+                                onValueChange = {
+                                    prompt = it
+                                    prefs.edit { putString("prompt", it) }
+                                },
                                 label = { Text(if (editMode) "编辑指令" else "图片描述 Prompt") },
                                 placeholder = {
                                     Text(
