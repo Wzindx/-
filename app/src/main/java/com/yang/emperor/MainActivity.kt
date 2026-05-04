@@ -1138,7 +1138,7 @@ fun MainScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(20.dp))
-                                    .clickable(enabled = !isReadingReferenceImage) { picker.launch("image/*") },
+                                    .clickable(enabled = !isReadingReferenceImage) { picker.launch(arrayOf("image/*")) },
                                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
                                 shape = RoundedCornerShape(20.dp),
                                 tonalElevation = 1.dp
