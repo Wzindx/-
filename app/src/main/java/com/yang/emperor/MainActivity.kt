@@ -874,8 +874,18 @@ fun MainScreen(
                             }
                         }
                         "running" -> {
-                            StatusCard("图片仍在处理中，请稍后刷新或等待完成通知。")
+                            StatusCard("图片仍在处理中，可在此直接取消。当前进程内的后台请求会被中止；重启后遗留记录会从本地清理。")
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Button(
+                                onClick = { cancelHistoryRunningItem(item) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFE11D48),
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Text("取消生成")
+                            }
                         }
                         "failed" -> {
                             StatusCard("处理失败，详细原因可复制后排查。")
