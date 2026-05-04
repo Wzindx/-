@@ -479,6 +479,68 @@ fun MainScreen(
         status = "已取消生成图像，并已中止后台请求。"
     }
 
+    fun cancelHistoryRunningItem(item: HistoryItem) {
+        if (item.state != "running") return
+
+        val matchingTaskIds = runningTasks.filter { taskId ->
+            runningTaskJobs.containsKey(taskId)
+        }
+
+        matchingTaskIds.forEach { taskId ->
+            if (taskId !in cancelledTaskIds) {
+                cancelledTaskIds.add(taskId)
+            }
+            cancelImageRequest(taskId)
+            runningTaskJobs[taskId]?.cancel(CancellationException("用户已从图片记录取消生成"))
+        }
+
+        history = history.filterNot { historyItem ->
+            historyItem.time == item.time && historyItem.prompt == item.prompt && historyItem.state == "running"
+        }
+        saveHistory(prefs, history)
+        previewHistoryItem = null
+
+        if (matchingTaskIds.isNotEmpty()) {
+            matchingTaskIds.forEach { taskId ->
+                runningTasks.remove(taskId)
+                runningTaskJobs.remove(taskId)
+            }
+            historyNotice = "已取消该处理中任务，并已中止当前后台请求。"
+            status = "已取消该处理中任务，并已中止当前后台请求。"
+        } else {
+            historyNotice = "已清理重启后遗留的处理中记录。"
+            status = "已清理重启后遗留的处理中记录。"
+        }
+    }
+
+    fun cancelAllHistoryRunningItems() {
+        val runningHistory = history.filter { it.state == "running" }
+        if (runningHistory.isEmpty()) return
+
+        val taskIds = runningTasks.toList()
+        taskIds.forEach { taskId ->
+            if (taskId !in cancelledTaskIds) {
+                cancelledTaskIds.add(taskId)
+            }
+            cancelImageRequest(taskId)
+            runningTaskJobs[taskId]?.cancel(CancellationException("用户已从图片记录取消全部生成"))
+        }
+
+        history = history.filterNot { it.state == "running" }
+        saveHistory(prefs, history)
+        runningTasks.clear()
+        runningTaskJobs.clear()
+        previewHistoryItem = null
+
+        if (taskIds.isNotEmpty()) {
+            historyNotice = "已取消全部处理中任务，并已中止当前后台请求。"
+            status = "已取消全部处理中任务，并已中止当前后台请求。"
+        } else {
+            historyNotice = "已清理重启后遗留的全部处理中记录。"
+            status = "已清理重启后遗留的全部处理中记录。"
+        }
+    }
+
     fun startBackgroundTask(task: ImageTask) {
         val job = activityTaskScope.launch {
             runningTasks.add(task.id)
