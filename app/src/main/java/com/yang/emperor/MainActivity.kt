@@ -1254,6 +1254,22 @@ fun MainScreen(
                                             return@launch
                                         }
 
+                                        prefs.edit {
+                                            putString("baseUrl", baseUrl.trim())
+                                            putString("apiKey", apiKey.trim())
+                                            putString("apiMode", apiMode.value)
+                                            putString("generateModel", generateModel.trim())
+                                            putString("editModel", editModel.trim())
+                                            putString("model", generateModel.trim())
+                                            putString("prompt", prompt)
+                                            putString("size", size)
+                                            putString("quality", quality)
+                                            putString("count", count)
+                                            putString("outputFormat", outputFormat)
+                                            putString("background", background)
+                                            putBoolean("onboardingDone", true)
+                                        }
+
                                         val task = ImageTask(
                                             id = UUID.randomUUID().toString(),
                                             time = now(),
