@@ -1,7 +1,3 @@
-Refresh v2.2 release after full v2.2 fixes:
-- cancelled tasks no longer keep late results
-- persisted generation configuration
-- VPN Software caused connection abort handling
-- v2.2 release notes describe all v2.2 updates only
+Refresh v2.2 after final tracked connection cleanup for compat edit and responses edit requests.
 
-Time: 2026-05-04 21:56 Asia/Shanghai
+Time: 2026-05-04 22:08 Asia/Shanghai
