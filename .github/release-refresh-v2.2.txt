@@ -1,8 +1,8 @@
-Refresh v2.2 release after reference image cache and opening flow fixes.
+Refresh v2.2 release after trimming release notes to only reference image and image opening optimizations.
 
-This file intentionally triggers the Android build and release workflow so the existing v2.2 GitHub Release is overwritten with the latest APK and focused release notes.
-
-Updated scope:
+Latest refresh scope:
 - Reference image reading stability
 - Reference image cache lifecycle cleanup
-- Smoother lower-blocking image opening flow
+- Smoother image opening flow
+
+Refresh timestamp: 2026-05-04 21:46 Asia/Shanghai
