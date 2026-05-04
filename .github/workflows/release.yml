@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish to, e.g. v2.1. Leave empty to use app versionName."
+        description: "Release tag to publish to, e.g. v2.2. Leave empty to use app versionName."
         required: false
         type: string
         default: ""
@@ -163,7 +163,13 @@ jobs:
 
           BODY_FILE="$RUNNER_TEMP/release-body.md"
           cat > "$BODY_FILE" <<'BODY'
-          ImageForge v2.1 是当前推荐安装版本，重点改进了图片生成后的预览、保存、分享、历史记录、错误提示、通知回跳和自动发布流程。
+          ## 更新内容
+
+          - 取消生成现在会同时取消后台协程并中止底层图片 API 网络请求，避免取消后请求仍在后台继续跑。
+          - 参考图选择后会立即读取并缓存，生成时直接复用缓存，降低 URI 权限、云相册回源或临时读取导致的失败概率。
+          - 图片模式 API Key 输入框默认脱敏显示；进入编辑/聚焦时显示原始密钥，方便直接修改已有密钥。
+          - 继续兼容 OpenAI Images、Images Edit 兼容路径和 Responses 图像接口。
+          - 版本号升级到 `__VERSION_NAME__`，Release tag 自动对齐为 `__TAG_NAME__`。
 
           ## 下载与安装
 
@@ -195,7 +201,28 @@ jobs:
           - 图片预览、保存、打开和分享。
           - 完整错误详情查看与复制。
 
-          ## v2.1 重点改进
+          ## v2.2 重点改进
+
+          ### 取消生成与后台任务
+
+          - 取消按钮不再只是清理界面状态，而是会取消对应后台 Job。
+          - 已发送的图片 API 请求会按任务 ID 主动断开连接。
+          - 已取消任务不会再覆盖当前预览或历史记录。
+          - 任务结束、失败或取消后会清理任务引用和网络连接引用。
+
+          ### 参考图读取
+
+          - 选择参考图后立即读取并缓存图片字节。
+          - 生成时优先使用缓存，不再临时读取 URI。
+          - 如果参考图缓存不可用，会提示重新选择或等待读取完成。
+          - 图生图 / 编辑模式的稳定性更高。
+
+          ### API Key 输入体验
+
+          - 设置页 API Key 默认脱敏。
+          - 引导页 API Key 默认脱敏。
+          - 输入框聚焦编辑时显示原始密钥，方便修改已有配置。
+          - 输入框失焦后恢复脱敏显示。
 
           ### 生成结果与历史记录
 
