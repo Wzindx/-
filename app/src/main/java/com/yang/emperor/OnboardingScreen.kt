@@ -343,6 +343,8 @@ private fun OobeConfigPage(
     onBaseUrlChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit
 ) {
+    var isApiKeyFocused by remember { mutableStateOf(false) }
+
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(
             text = "配置接口",
