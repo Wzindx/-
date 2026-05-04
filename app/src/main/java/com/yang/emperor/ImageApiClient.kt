@@ -24,7 +24,7 @@ private val activeImageConnections = ConcurrentHashMap<String, MutableSet<HttpUR
 fun cancelImageRequest(requestId: String) {
     activeImageConnections.remove(requestId)?.forEach { conn ->
         runCatching { conn.disconnect() }
-    })
+    }
 }
 
 private fun trackConnection(requestId: String?, conn: HttpURLConnection): HttpURLConnection {
@@ -414,7 +414,7 @@ private fun openPostConnection(
         setRequestProperty("Content-Type", contentType)
         setRequestProperty("Accept", "application/json")
         setRequestProperty("Connection", "close")
-    }
+    })
 }
 
 private fun writeJsonBody(conn: HttpURLConnection, body: JSONObject) {
