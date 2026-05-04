@@ -462,6 +462,9 @@ fun MainScreen(
 
         val taskIds = runningTasks.toList()
         taskIds.forEach { taskId ->
+            if (taskId !in cancelledTaskIds) {
+                cancelledTaskIds.add(taskId)
+            }
             cancelImageRequest(taskId)
             runningTaskJobs[taskId]?.cancel(CancellationException("用户已取消生成图像"))
         }
