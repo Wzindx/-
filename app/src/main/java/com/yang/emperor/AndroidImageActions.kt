@@ -150,17 +150,14 @@ fun openImageFromHistory(context: Context, imageUri: String): Boolean {
         return false
     }
 
-    val uri = imageUri.toUri()
     return try {
-        context.contentResolver.openInputStream(uri)?.close()
-            ?: error("无法读取图片文件")
         context.startActivity(buildOpenImageIntent(context, imageUri))
         true
     } catch (_: ActivityNotFoundException) {
         Toast.makeText(context, "没有可用的图片查看应用。", Toast.LENGTH_SHORT).show()
         false
     } catch (e: Exception) {
-        Toast.makeText(context, "打开失败：${e.message ?: "图片无法读取"}", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "打开失败：${e.message ?: "图片无法打开"}", Toast.LENGTH_LONG).show()
         false
     }
 }
