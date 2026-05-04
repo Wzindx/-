@@ -251,7 +251,7 @@ fun callEditResponses(
             writeJsonBody(conn, body)
             parseResponsesImageResponse(conn)
         } finally {
-            conn.disconnect()
+            closeConnection(requestId, conn)
         }
     }
 }
