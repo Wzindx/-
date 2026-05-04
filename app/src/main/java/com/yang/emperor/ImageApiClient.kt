@@ -450,11 +450,14 @@ private fun friendlyNetworkIOException(error: Throwable, stage: String): IOExcep
     val allMessages = chain.joinToString("\n") { cause ->
         "${cause.javaClass.name}: ${cause.message.orEmpty()}"
     }
+    val isSoftwareAbort = allMessages.contains("Software caused connection abort", ignoreCase = true)
     val isUnexpectedEnd = allMessages.contains("unexpected end of stream", ignoreCase = true) ||
         allMessages.contains("EOFException", ignoreCase = true) ||
         chain.any { it is EOFException }
 
-    val hint = if (isUnexpectedEnd) {
+    val hint = if (isSoftwareAbort) {
+        "VPN/代理连接在读取 HTTP 响应头或响应体时被系统/代理节点中断：Software caused connection abort。常见原因是当前代理节点复用连接不稳定、中转网关提前关闭 TLS 连接、Base URL 上游响应过慢或网络在大请求后抖动。App 已强制使用 Connection: close、取消时主动 disconnect，并会自动重试；如果仍失败，请优先切换 VPN 节点，或关闭/开启代理做对比测试，再考虑更换更稳定的 Base URL。"
+    } else if (isUnexpectedEnd) {
         "网络连接在读取响应时提前断开。常见原因：VPN/代理节点或中转网关提前关闭连接、Base URL 服务不稳定、HTTP/1.1 长连接复用异常、接口返回空响应，或当前网络抖动。App 已使用 Connection: close 并会对这类断流自动重试；如果仍失败，请切换代理节点、关闭/开启代理对比测试，或更换更稳定的 Base URL。"
     } else {
         "网络请求失败。请检查网络、Base URL、代理节点、网关转发、服务端状态或接口兼容性。"
