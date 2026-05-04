@@ -1,8 +1,7 @@
-Refresh v2.2 release after trimming release notes to only reference image and image opening optimizations.
+Refresh v2.2 release after full v2.2 fixes:
+- cancelled tasks no longer keep late results
+- persisted generation configuration
+- VPN Software caused connection abort handling
+- v2.2 release notes describe all v2.2 updates only
 
-Latest refresh scope:
-- Reference image reading stability
-- Reference image cache lifecycle cleanup
-- Smoother image opening flow
-
-Refresh timestamp: 2026-05-04 21:46 Asia/Shanghai
+Time: 2026-05-04 21:56 Asia/Shanghai
