@@ -147,7 +147,7 @@ fun callEdit(
             }
             parseImageResponse(conn)
         } finally {
-            conn.disconnect()
+            closeConnection(requestId, conn)
         }
     }
 }
