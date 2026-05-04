@@ -583,14 +583,13 @@ fun MainScreen(
                 }
             } catch (e: CancellationException) {
                 cancelImageRequest(task.id)
-                if (task.id in runningTasks) {
-                    history = history.map {
-                        if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
-                            it.copy(path = "已取消", state = "failed", error = "用户已取消生成图像。")
-                        } else it
-                    }
-                    saveHistory(prefs, history)
+                if (task.id !in cancelledTaskIds) {
+                    cancelledTaskIds.add(task.id)
                 }
+                history = history.filterNot {
+                    it.time == task.time && it.prompt == task.prompt && it.state == "running"
+                }
+                saveHistory(prefs, history)
             } catch (e: Exception) {
                 if (task.id in cancelledTaskIds || task.id !in runningTasks) {
                     return@launch
