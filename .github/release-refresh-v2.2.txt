@@ -1,3 +1,3 @@
-Refresh v2.2 after history running cancel controls and selection header fix
+Refresh v2.2 after final history running cancellation fixes
 
-Time: 2026-05-05 00:56 Asia/Shanghai
+Time: 2026-05-05 01:31 Asia/Shanghai
