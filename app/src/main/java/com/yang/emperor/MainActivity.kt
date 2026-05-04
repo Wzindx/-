@@ -1058,6 +1058,12 @@ fun MainScreen(
                     remove("editModel")
                     remove("model")
                     remove("customSaveDirectoryUri")
+                    remove("prompt")
+                    remove("size")
+                    remove("quality")
+                    remove("count")
+                    remove("outputFormat")
+                    remove("background")
                     remove("onboardingDone")
                 }
                 baseUrl = "https://api.openai.com/v1"
