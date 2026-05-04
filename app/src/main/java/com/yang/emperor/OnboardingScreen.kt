@@ -95,6 +95,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -110,6 +111,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import com.yang.emperor.ui.theme.AppTheme
@@ -288,6 +290,7 @@ private fun OobeIntroPage() {
 
 @Composable
 private fun OobeFeaturePage() {
+    var isApiKeyFocused by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(
             text = "清爽风格界面",
@@ -366,9 +369,11 @@ private fun OobeConfigPage(
             onValueChange = onApiKeyChange,
             label = { Text("API Key") },
             placeholder = { Text("输入你的密钥") },
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (isApiKeyFocused) VisualTransformation.None else PasswordVisualTransformation(),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isApiKeyFocused = it.isFocused },
             shape = RoundedCornerShape(20.dp)
         )
     }
