@@ -404,23 +404,33 @@ fun MainScreen(
         }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         selectedImage = uri
         selectedImageBytes = null
 
         if (uri == null) {
             isReadingReferenceImage = false
             status = ""
+            activityTaskScope.launch(Dispatchers.IO) {
+                clearReferenceImageCache(context)
+            }
             return@rememberLauncherForActivityResult
+        }
+
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
         showReferenceSheet = false
         isReadingReferenceImage = true
-        status = "正在读取参考图..."
+        status = "正在读取并缓存参考图..."
 
         activityTaskScope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { readReferenceImageBytes(context, uri) }
+                runCatching {
+                    clearReferenceImageCache(context)
+                    cacheReferenceImageBytes(context, uri)
+                }
             }
 
             if (selectedImage != uri) {
@@ -433,7 +443,11 @@ fun MainScreen(
                     status = "参考图已读取并缓存，将用于下一次图生图。"
                 }
                 .onFailure {
+                    selectedImage = null
                     selectedImageBytes = null
+                    withContext(Dispatchers.IO) {
+                        clearReferenceImageCache(context)
+                    }
                     status = "参考图读取失败：${it.message ?: "未知错误"}，请重新选择。"
                 }
 
