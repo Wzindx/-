@@ -469,16 +469,8 @@ fun MainScreen(
             runningTaskJobs[taskId]?.cancel(CancellationException("用户已取消生成图像"))
         }
 
-        history = history.map { item ->
-            if (item.state == "running") {
-                item.copy(
-                    path = "已取消",
-                    state = "failed",
-                    error = "用户已取消生成图像。\n\n该任务已从 ImageForge 界面取消，并已尝试中止后台协程与底层图片 API 网络请求；如果远端服务端已经接收请求，服务端可能仍会短暂处理，但结果不会再覆盖当前记录。"
-                )
-            } else {
-                item
-            }
+        history = history.filterNot { item ->
+            item.state == "running"
         }
         saveHistory(prefs, history)
         runningTasks.clear()
