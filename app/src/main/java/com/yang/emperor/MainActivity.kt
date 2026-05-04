@@ -660,7 +660,7 @@ fun MainScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { picker.launch("image/*") }) {
+                TextButton(onClick = { picker.launch(arrayOf("image/*")) }) {
                     Text(if (selectedImage == null) "选择参考图" else "更换参考图")
                 }
             },
