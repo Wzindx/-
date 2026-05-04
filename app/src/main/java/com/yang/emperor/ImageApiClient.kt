@@ -388,6 +388,7 @@ private fun isRetryableNetworkFailure(error: Throwable): Boolean {
     }
 
     return chain.any { it is EOFException || it is SocketException || it is SocketTimeoutException } ||
+        allMessages.contains("Software caused connection abort", ignoreCase = true) ||
         allMessages.contains("unexpected end of stream", ignoreCase = true) ||
         allMessages.contains("EOFException", ignoreCase = true) ||
         allMessages.contains("读取 HTTP 响应头失败", ignoreCase = true) ||
