@@ -96,6 +96,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -111,6 +112,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import com.yang.emperor.ui.theme.AppTheme
@@ -214,6 +216,7 @@ internal fun SettingsScreen(
     outerPadding: PaddingValues = PaddingValues()
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    var isApiKeyFocused by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = pageBg
     ) { padding ->
@@ -253,9 +256,11 @@ internal fun SettingsScreen(
                         onValueChange = onApiKeyChange,
                         label = { Text("API Key") },
                         placeholder = { Text("输入你的密钥") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (isApiKeyFocused) VisualTransformation.None else PasswordVisualTransformation(),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { isApiKeyFocused = it.isFocused },
                         shape = RoundedCornerShape(18.dp)
                     )
 
