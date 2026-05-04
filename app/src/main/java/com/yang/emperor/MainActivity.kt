@@ -320,6 +320,7 @@ fun MainScreen(
     var onboardingSessionId by remember { mutableLongStateOf(0L) }
     val runningTasks = remember { mutableStateListOf<String>() }
     val runningTaskJobs = remember { mutableMapOf<String, Job>() }
+    val cancelledTaskIds = remember { mutableStateListOf<String>() }
     var customSaveDirectoryUriString by rememberSaveable { mutableStateOf(prefs.getString("customSaveDirectoryUri", "") ?: "") }
     val customSaveDirectoryUri = customSaveDirectoryUriString.takeIf { it.isNotBlank() }?.let { it.toUri() }
     val saveDirectoryLabel = readableSaveDirectoryLabel(customSaveDirectoryUriString)
