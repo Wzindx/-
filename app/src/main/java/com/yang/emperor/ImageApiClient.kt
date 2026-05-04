@@ -189,7 +189,7 @@ fun callEditGenerationsCompat(
             writeJsonBody(conn, body)
             parseImageResponse(conn)
         } finally {
-            conn.disconnect()
+            closeConnection(requestId, conn)
         }
     }
 }
