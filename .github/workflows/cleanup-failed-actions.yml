@@ -14,7 +14,7 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete failed workflow runs
+      - name: Delete failed workflow runs until clean
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -27,18 +27,13 @@ jobs:
           echo "Current cleanup run: ${CURRENT_RUN_ID}"
 
           bad_conclusions='["failure","cancelled","timed_out","action_required","startup_failure"]'
-
-          page=1
-          deleted=0
-          skipped=0
+          total_deleted=0
+          pass=1
 
           while true; do
-            response="$(gh api "/repos/${REPO}/actions/runs?per_page=100&page=${page}")"
-            count="$(jq '.workflow_runs | length' <<< "$response")"
+            echo "Cleanup pass: ${pass}"
 
-            if [ "$count" -eq 0 ]; then
-              break
-            fi
+            response="$(gh api "/repos/${REPO}/actions/runs?per_page=100&page=1")"
 
             mapfile -t ids < <(
               jq -r --argjson bad "$bad_conclusions" --arg current "$CURRENT_RUN_ID" '
@@ -50,6 +45,11 @@ jobs:
               ' <<< "$response"
             )
 
+            if [ "${#ids[@]}" -eq 0 ]; then
+              echo "No failed completed workflow runs found on page 1."
+              break
+            fi
+
             for id in "${ids[@]}"; do
               if [ -z "$id" ]; then
                 continue
@@ -57,23 +57,27 @@ jobs:
 
               echo "Deleting failed workflow run: $id"
               if gh api -X DELETE "/repos/${REPO}/actions/runs/${id}"; then
-                deleted=$((deleted + 1))
+                total_deleted=$((total_deleted + 1))
               else
                 echo "Failed to delete workflow run: $id"
-                skipped=$((skipped + 1))
               fi
             done
 
-            page=$((page + 1))
+            pass=$((pass + 1))
+
+            if [ "$pass" -gt 20 ]; then
+              echo "Reached safety pass limit."
+              break
+            fi
           done
 
-          echo "Deleted failed workflow runs: ${deleted}"
-          echo "Skipped failed workflow runs: ${skipped}"
+          echo "Total deleted failed workflow runs: ${total_deleted}"
 
-      - name: Verify remaining failed workflow runs
+      - name: Verify no failed workflow runs remain
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -91,11 +95,12 @@ jobs:
             fi
 
             page_remaining="$(
-              jq --argjson bad "$bad_conclusions" '
+              jq --argjson bad "$bad_conclusions" --arg current "$CURRENT_RUN_ID" '
                 [
                   .workflow_runs[]
                   | select(.status == "completed")
                   | select(.conclusion as $c | $bad | index($c))
+                  | select((.id | tostring) != $current)
                 ]
                 | length
               ' <<< "$response"
@@ -105,9 +110,9 @@ jobs:
             page=$((page + 1))
           done
 
-          echo "Remaining failed completed workflow runs: ${remaining}"
+          echo "Remaining failed completed workflow runs excluding current run: ${remaining}"
 
           if [ "$remaining" -gt 0 ]; then
-            echo "Some failed workflow runs could not be deleted."
+            echo "Some failed workflow runs still remain."
             exit 1
           fi
