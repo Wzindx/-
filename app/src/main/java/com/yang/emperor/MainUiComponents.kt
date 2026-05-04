@@ -597,7 +597,8 @@ fun HistoryCard(
     onPreview: () -> Unit = {},
     onOpen: () -> Unit = {},
     onSave: () -> Unit = {},
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onCancelRunning: () -> Unit = {}
 ) {
     val borderColor = if (selected) accent else Color.Transparent
 
@@ -700,10 +701,16 @@ fun HistoryCard(
 
                 if (item.state == "running") {
                     Text(
-                        text = "任务仍在后台处理，完成后会更新为图片预览。",
+                        text = "任务仍在后台处理，可直接取消生成。",
                         color = Color(0xFFD97706),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    TextButton(
+                        onClick = onCancelRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("取消生成", color = Color(0xFFE11D48), fontWeight = FontWeight.Bold)
+                    }
                 }
 
 
