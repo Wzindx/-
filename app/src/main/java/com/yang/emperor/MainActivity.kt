@@ -952,7 +952,10 @@ fun MainScreen(
                 onSelected = { display ->
                     currentSizes.firstOrNull {
                         "${it.title} · ${it.value}" == display
-                    }?.let { size = it.value }
+                    }?.let {
+                        size = it.value
+                        prefs.edit { putString("size", it.value) }
+                    }
                 }
             )
             AppDropdownField(
