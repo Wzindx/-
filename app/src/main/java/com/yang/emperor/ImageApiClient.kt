@@ -10,12 +10,42 @@ import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.UUID
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 private const val CONNECT_TIMEOUT_MS = 30_000
 private const val READ_TIMEOUT_MS = 180_000
 private const val MAX_ERROR_BODY_CHARS = 20_000
 private const val MAX_NETWORK_ATTEMPTS = 3
 private const val RETRY_DELAY_MS = 800L
+
+private val activeImageConnections = ConcurrentHashMap<String, MutableSet<HttpURLConnection>>()
+
+fun cancelImageRequest(requestId: String) {
+    activeImageConnections.remove(requestId)?.forEach { conn ->
+        runCatching { conn.disconnect() }
+    })
+}
+
+private fun trackConnection(requestId: String?, conn: HttpURLConnection): HttpURLConnection {
+    if (!requestId.isNullOrBlank()) {
+        val connections = activeImageConnections.getOrPut(requestId) {
+            Collections.newSetFromMap(ConcurrentHashMap<HttpURLConnection, Boolean>())
+        }
+        connections.add(conn)
+    }
+    return conn
+}
+
+private fun closeConnection(requestId: String?, conn: HttpURLConnection) {
+    runCatching { conn.disconnect() }
+    if (!requestId.isNullOrBlank()) {
+        activeImageConnections[requestId]?.remove(conn)
+        if (activeImageConnections[requestId]?.isEmpty() == true) {
+            activeImageConnections.remove(requestId)
+        }
+    }
+}
 
 fun endpoint(baseUrl: String, path: String): String {
     val normalizedBaseUrl = baseUrl.trim().trimEnd('/')
@@ -39,7 +69,8 @@ fun callGenerate(
     prompt: String,
     n: Int,
     size: String,
-    quality: String
+    quality: String,
+    requestId: String? = null
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(model.isNotBlank()) { "请填写模型 ID" }
@@ -53,12 +84,12 @@ fun callGenerate(
         .put("quality", quality)
 
     return withNetworkRetries("文生图请求") {
-        val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey)
+        val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey, requestId = requestId)
         try {
             writeJsonBody(conn, body)
             parseImageResponse(conn)
         } finally {
-            conn.disconnect()
+            closeConnection(requestId, conn)
         }
     }
 }
@@ -72,7 +103,8 @@ fun callEdit(
     size: String,
     quality: String,
     outputFormat: String,
-    background: String
+    background: String,
+    requestId: String? = null
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(model.isNotBlank()) { "请填写模型 ID" }
@@ -84,7 +116,8 @@ fun callEdit(
         val conn = openPostConnection(
             url = endpoint(baseUrl, "/images/edits"),
             apiKey = apiKey,
-            contentType = "multipart/form-data; boundary=$boundary"
+            contentType = "multipart/form-data; boundary=$boundary",
+            requestId = requestId
         )
 
         try {
@@ -126,7 +159,8 @@ fun callEditGenerationsCompat(
     prompt: String,
     imageBytes: ByteArray?,
     size: String,
-    quality: String
+    quality: String,
+    requestId: String? = null
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(model.isNotBlank()) { "请填写模型 ID" }
@@ -150,7 +184,7 @@ fun callEditGenerationsCompat(
         .put("reference_image", inputImageDataUrl)
 
     return withNetworkRetries("兼容模式图生图请求") {
-        val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey)
+        val conn = openPostConnection(endpoint(baseUrl, "/images/generations"), apiKey, requestId = requestId)
         try {
             writeJsonBody(conn, body)
             parseImageResponse(conn)
@@ -169,7 +203,8 @@ fun callEditResponses(
     size: String,
     quality: String,
     outputFormat: String,
-    background: String
+    background: String,
+    requestId: String? = null
 ): ByteArray {
     require(apiKey.isNotBlank()) { "请填写 API Key" }
     require(model.isNotBlank()) { "请填写模型 ID" }
@@ -211,7 +246,7 @@ fun callEditResponses(
         .put("tool_choice", "required")
 
     return withNetworkRetries("Responses 图像请求") {
-        val conn = openPostConnection(endpoint(baseUrl, "/responses"), apiKey)
+        val conn = openPostConnection(endpoint(baseUrl, "/responses"), apiKey, requestId = requestId)
         try {
             writeJsonBody(conn, body)
             parseResponsesImageResponse(conn)
@@ -367,9 +402,10 @@ private fun isRetryableNetworkFailure(error: Throwable): Boolean {
 private fun openPostConnection(
     url: String,
     apiKey: String,
-    contentType: String = "application/json"
+    contentType: String = "application/json",
+    requestId: String? = null
 ): HttpURLConnection {
-    return (URL(url).openConnection() as HttpURLConnection).apply {
+    return trackConnection(requestId, (URL(url).openConnection() as HttpURLConnection).apply {
         requestMethod = "POST"
         connectTimeout = CONNECT_TIMEOUT_MS
         readTimeout = READ_TIMEOUT_MS
