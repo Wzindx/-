@@ -553,12 +553,16 @@ fun MainScreen(
                         )
                     }
                 }
-                if (task.id !in runningTasks) {
+                if (task.id !in runningTasks || task.id in cancelledTaskIds) {
                     return@launch
                 }
 
                 imageBytes = result
                 previewPrompt = task.prompt
+                if (task.id !in runningTasks || task.id in cancelledTaskIds) {
+                    return@launch
+                }
+
                 val savedResult = runCatching {
                     saveImageToAppFiles(context, result, task.outputFormat)
                 }
