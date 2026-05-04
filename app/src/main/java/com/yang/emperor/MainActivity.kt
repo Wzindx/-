@@ -1607,11 +1607,28 @@ fun MainScreen(
                         }
 
                         if (selectedHistoryKeys.isNotEmpty()) {
-                            StatusPill(
-                                text = "已选 ${selectedHistoryKeys.size}",
-                                bg = Color(0xFFEFF6FF),
-                                fg = Color(0xFF315AA6)
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                StatusPill(
+                                    text = "已选 ${selectedHistoryKeys.size}",
+                                    bg = Color(0xFFEFF6FF),
+                                    fg = Color(0xFF315AA6)
+                                )
+                                TextButton(
+                                    onClick = {
+                                        selectedHistoryKeys.clear()
+                                        selectedHistoryKeys.addAll(history.map { "${it.time}|${it.prompt}" })
+                                    },
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(Color(0xFFE0E7FF))
+                                        .padding(horizontal = 10.dp, vertical = 2.dp)
+                                ) {
+                                    Text("全选", color = Color(0xFF3730A3), fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
@@ -1621,6 +1638,16 @@ fun MainScreen(
                         failedCount = history.count { it.state == "failed" },
                         runningCount = history.count { it.state == "running" }
                     )
+                }
+                if (history.any { it.state == "running" }) {
+                    item {
+                        TextButton(
+                            onClick = { cancelAllHistoryRunningItems() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("取消全部处理中任务", color = Color(0xFFE11D48), fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
 
                 if (historyNotice.isNotBlank()) {
@@ -1688,28 +1715,15 @@ fun MainScreen(
                                 if (item.state == "success" && item.path.startsWith("content://")) {
                                     historyNotice = if (shareImageFromHistory(context, item.path)) "已打开系统分享。" else "分享失败。"
                                 }
+                            },
+                            onCancelRunning = {
+                                cancelHistoryRunningItem(item)
                             }
                         )
                     }
                 }
                 }
-                // Floating top-right select-all button (only in selection mode)
-                if (selectedHistoryKeys.isNotEmpty()) {
-                    TextButton(
-                        onClick = {
-                            selectedHistoryKeys.clear()
-                            selectedHistoryKeys.addAll(history.map { "${it.time}|${it.prompt}" })
-                        },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 8.dp, end = 8.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0xFFE0E7FF))
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text("全选", color = Color(0xFF3730A3), fontWeight = FontWeight.Bold)
-                    }
-                }
+
                 // Floating bottom-right delete FAB (only in selection mode)
                 if (selectedHistoryKeys.isNotEmpty()) {
                     Surface(
