@@ -289,12 +289,12 @@ fun MainScreen(
     var editModel by rememberSaveable { mutableStateOf(prefs.getString("editModel", "gpt-image-2") ?: "gpt-image-2") }
     var customGenerateModel by rememberSaveable { mutableStateOf(generateModel) }
     var customEditModel by rememberSaveable { mutableStateOf(editModel) }
-    var prompt by rememberSaveable { mutableStateOf("") }
-    var size by rememberSaveable { mutableStateOf("1024x1024") }
-    var quality by rememberSaveable { mutableStateOf("auto") }
-    var count by rememberSaveable { mutableStateOf("1") }
-    var outputFormat by rememberSaveable { mutableStateOf("png") }
-    var background by rememberSaveable { mutableStateOf("auto") }
+    var prompt by rememberSaveable { mutableStateOf(prefs.getString("prompt", "") ?: "") }
+    var size by rememberSaveable { mutableStateOf(prefs.getString("size", "1024x1024") ?: "1024x1024") }
+    var quality by rememberSaveable { mutableStateOf(prefs.getString("quality", "auto") ?: "auto") }
+    var count by rememberSaveable { mutableStateOf(prefs.getString("count", "1") ?: "1") }
+    var outputFormat by rememberSaveable { mutableStateOf(prefs.getString("outputFormat", "png") ?: "png") }
+    var background by rememberSaveable { mutableStateOf(prefs.getString("background", "auto") ?: "auto") }
     var editMode by rememberSaveable { mutableStateOf(false) }
     var selectedImage by remember { mutableStateOf(null as Uri?) }
     var selectedImageBytes by remember { mutableStateOf(null as ByteArray?) }
