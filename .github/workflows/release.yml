@@ -219,11 +219,9 @@ jobs:
 
           本版本已通过自动化流程验证：
 
-          - Android Lint：通过。
-          - Debug APK：构建通过。
           - Release APK：构建通过。
-          - GitHub Release：自动上传完成。
-          - Release tag：已自动对齐发布提交。
+          - GitHub Release：自动覆盖上传完成。
+          - Release tag：已自动对齐本次参考图优化提交。
           BODY
 
           sed -i "s/__TAG_NAME__/$TAG_NAME/g; s/__VERSION_NAME__/$VERSION_NAME/g" "$BODY_FILE"
