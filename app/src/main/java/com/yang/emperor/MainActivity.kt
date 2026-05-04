@@ -962,25 +962,37 @@ fun MainScreen(
                 title = "画质",
                 selected = quality,
                 options = qualityOptions,
-                onSelected = { quality = it }
+                onSelected = {
+                    quality = it
+                    prefs.edit { putString("quality", it) }
+                }
             )
             AppDropdownField(
                 title = "输出格式",
                 selected = outputFormat,
                 options = outputFormats,
-                onSelected = { outputFormat = it }
+                onSelected = {
+                    outputFormat = it
+                    prefs.edit { putString("outputFormat", it) }
+                }
             )
             AppDropdownField(
                 title = "背景",
                 selected = background,
                 options = backgroundOptions,
-                onSelected = { background = it }
+                onSelected = {
+                    background = it
+                    prefs.edit { putString("background", it) }
+                }
             )
             AppDropdownField(
                 title = "生成数量",
                 selected = count,
                 options = (1..10).map { it.toString() },
-                onSelected = { count = it }
+                onSelected = {
+                    count = it
+                    prefs.edit { putString("count", it) }
+                }
             )
             Button(
                 onClick = { showParamsSheet = false },
