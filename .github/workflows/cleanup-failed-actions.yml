@@ -1,0 +1,113 @@
+name: Cleanup Failed Actions
+
+on:
+  push:
+    paths:
+      - ".github/workflows/cleanup-failed-actions.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete failed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Repository: ${REPO}"
+          echo "Current cleanup run: ${CURRENT_RUN_ID}"
+
+          bad_conclusions='["failure","cancelled","timed_out","action_required","startup_failure"]'
+
+          page=1
+          deleted=0
+          skipped=0
+
+          while true; do
+            response="$(gh api "/repos/${REPO}/actions/runs?per_page=100&page=${page}")"
+            count="$(jq '.workflow_runs | length' <<< "$response")"
+
+            if [ "$count" -eq 0 ]; then
+              break
+            fi
+
+            mapfile -t ids < <(
+              jq -r --argjson bad "$bad_conclusions" --arg current "$CURRENT_RUN_ID" '
+                .workflow_runs[]
+                | select(.status == "completed")
+                | select(.conclusion as $c | $bad | index($c))
+                | select((.id | tostring) != $current)
+                | .id
+              ' <<< "$response"
+            )
+
+            for id in "${ids[@]}"; do
+              if [ -z "$id" ]; then
+                continue
+              fi
+
+              echo "Deleting failed workflow run: $id"
+              if gh api -X DELETE "/repos/${REPO}/actions/runs/${id}"; then
+                deleted=$((deleted + 1))
+              else
+                echo "Failed to delete workflow run: $id"
+                skipped=$((skipped + 1))
+              fi
+            done
+
+            page=$((page + 1))
+          done
+
+          echo "Deleted failed workflow runs: ${deleted}"
+          echo "Skipped failed workflow runs: ${skipped}"
+
+      - name: Verify remaining failed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bad_conclusions='["failure","cancelled","timed_out","action_required","startup_failure"]'
+          remaining=0
+          page=1
+
+          while true; do
+            response="$(gh api "/repos/${REPO}/actions/runs?per_page=100&page=${page}")"
+            count="$(jq '.workflow_runs | length' <<< "$response")"
+
+            if [ "$count" -eq 0 ]; then
+              break
+            fi
+
+            page_remaining="$(
+              jq --argjson bad "$bad_conclusions" '
+                [
+                  .workflow_runs[]
+                  | select(.status == "completed")
+                  | select(.conclusion as $c | $bad | index($c))
+                ]
+                | length
+              ' <<< "$response"
+            )"
+
+            remaining=$((remaining + page_remaining))
+            page=$((page + 1))
+          done
+
+          echo "Remaining failed completed workflow runs: ${remaining}"
+
+          if [ "$remaining" -gt 0 ]; then
+            echo "Some failed workflow runs could not be deleted."
+            exit 1
+          fi
