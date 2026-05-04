@@ -129,7 +129,7 @@ import java.io.IOException
 private const val DEVELOPER_QQ = "2753761311"
 private const val DEVELOPER_QQ_AVATAR_URL = "https://q1.qlogo.cn/g?b=qq&nk=$DEVELOPER_QQ&s=640"
 private const val IMAGEFORGE_REPO_URL = "https://github.com/Wzindx/ImageForge"
-private const val IMAGEFORGE_VERSION_NAME = "2.1"
+
 
 private var developerAvatarCache: Bitmap? = null
 
@@ -421,7 +421,7 @@ internal fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Text(
-                                text = "版本：$IMAGEFORGE_VERSION_NAME",
+                                text = "版本：${BuildConfig.VERSION_NAME}",
                                 color = Color(0xFF6B7280),
                                 style = MaterialTheme.typography.bodySmall
                             )
