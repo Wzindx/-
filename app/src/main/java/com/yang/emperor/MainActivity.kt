@@ -600,6 +600,9 @@ fun MainScreen(
                     saveHistory(prefs, history)
                 }
             } catch (e: Exception) {
+                if (task.id in cancelledTaskIds || task.id !in runningTasks) {
+                    return@launch
+                }
                 val detailedError = detailedTaskErrorMessage(e, task)
                 history = history.map {
                     if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
