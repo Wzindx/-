@@ -116,8 +116,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import com.yang.emperor.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
@@ -317,6 +319,7 @@ fun MainScreen(
     var onboardingReturnRoute by remember { mutableStateOf(ScreenRoute.MAIN.name) }
     var onboardingSessionId by remember { mutableLongStateOf(0L) }
     val runningTasks = remember { mutableStateListOf<String>() }
+    val runningTaskJobs = remember { mutableMapOf<String, Job>() }
     var customSaveDirectoryUriString by rememberSaveable { mutableStateOf(prefs.getString("customSaveDirectoryUri", "") ?: "") }
     val customSaveDirectoryUri = customSaveDirectoryUriString.takeIf { it.isNotBlank() }?.let { it.toUri() }
     val saveDirectoryLabel = readableSaveDirectoryLabel(customSaveDirectoryUriString)
@@ -404,27 +407,56 @@ fun MainScreen(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedImage = uri
         selectedImageBytes = null
-        isReadingReferenceImage = false
 
         if (uri == null) {
+            isReadingReferenceImage = false
             status = ""
             return@rememberLauncherForActivityResult
         }
 
         showReferenceSheet = false
-        status = "参考图已选择，将在生成时读取，避免打开图片后卡顿。"
+        isReadingReferenceImage = true
+        status = "正在读取参考图..."
+
+        activityTaskScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { readReferenceImageBytes(context, uri) }
+            }
+
+            if (selectedImage != uri) {
+                return@launch
+            }
+
+            result
+                .onSuccess { bytes ->
+                    selectedImageBytes = bytes
+                    status = "参考图已读取并缓存，将用于下一次图生图。"
+                }
+                .onFailure {
+                    selectedImageBytes = null
+                    status = "参考图读取失败：${it.message ?: "未知错误"}，请重新选择。"
+                }
+
+            isReadingReferenceImage = false
+        }
     }
 
 
     fun cancelRunningImageTasks() {
         if (runningTasks.isEmpty()) return
 
+        val taskIds = runningTasks.toList()
+        taskIds.forEach { taskId ->
+            cancelImageRequest(taskId)
+            runningTaskJobs[taskId]?.cancel(CancellationException("用户已取消生成图像"))
+        }
+
         history = history.map { item ->
             if (item.state == "running") {
                 item.copy(
                     path = "已取消",
                     state = "failed",
-                    error = "用户已取消生成图像。\n\n该任务已从 ImageForge 界面取消；如果请求已经发送到远端服务端，服务端可能仍会短暂处理，但结果不会再覆盖当前记录。"
+                    error = "用户已取消生成图像。\n\n该任务已从 ImageForge 界面取消，并已尝试中止后台协程与底层图片 API 网络请求；如果远端服务端已经接收请求，服务端可能仍会短暂处理，但结果不会再覆盖当前记录。"
                 )
             } else {
                 item
@@ -432,13 +464,15 @@ fun MainScreen(
         }
         saveHistory(prefs, history)
         runningTasks.clear()
-        historyNotice = "已取消生成图像。"
-        status = "已取消生成图像。"
+        runningTaskJobs.clear()
+        historyNotice = "已取消生成图像，并已中止后台请求。"
+        status = "已取消生成图像，并已中止后台请求。"
     }
 
     fun startBackgroundTask(task: ImageTask) {
-        activityTaskScope.launch {
+        val job = activityTaskScope.launch {
             runningTasks.add(task.id)
+            runningTaskJobs[task.id] = coroutineContext[Job] ?: return@launch
             val runningItem = HistoryItem(
                 time = task.time,
                 mode = task.mode,
@@ -462,7 +496,8 @@ fun MainScreen(
                                 size = task.size,
                                 quality = task.quality,
                                 outputFormat = task.outputFormat,
-                                background = task.background
+                                background = task.background,
+                                requestId = task.id
                             )
                             ApiMode.RESPONSES -> callEditResponses(
                                 baseUrl = task.baseUrl,
@@ -473,7 +508,8 @@ fun MainScreen(
                                 size = task.size,
                                 quality = task.quality,
                                 outputFormat = task.outputFormat,
-                                background = task.background
+                                background = task.background,
+                                requestId = task.id
                             )
                             ApiMode.GENERATIONS_EDIT -> callEditGenerationsCompat(
                                 model = task.model,
@@ -482,7 +518,8 @@ fun MainScreen(
                                 baseUrl = task.baseUrl,
                                 apiKey = task.apiKey,
                                 size = task.size,
-                                quality = task.quality
+                                quality = task.quality,
+                                requestId = task.id
                             )
                         }
                     } else {
@@ -493,7 +530,8 @@ fun MainScreen(
                             prompt = task.prompt,
                             n = task.count.toIntOrNull() ?: 1,
                             size = task.size,
-                            quality = task.quality
+                            quality = task.quality,
+                            requestId = task.id
                         )
                     }
                 }
@@ -529,6 +567,16 @@ fun MainScreen(
                     saveHistory(prefs, history)
                     historyNotice = detailedError
                 }
+            } catch (e: CancellationException) {
+                cancelImageRequest(task.id)
+                if (task.id in runningTasks) {
+                    history = history.map {
+                        if (it.time == task.time && it.prompt == task.prompt && it.state == "running") {
+                            it.copy(path = "已取消", state = "failed", error = "用户已取消生成图像。")
+                        } else it
+                    }
+                    saveHistory(prefs, history)
+                }
             } catch (e: Exception) {
                 val detailedError = detailedTaskErrorMessage(e, task)
                 history = history.map {
@@ -540,6 +588,8 @@ fun MainScreen(
                 historyNotice = "后台任务失败：${compactErrorMessage(detailedError)}"
             } finally {
                 runningTasks.remove(task.id)
+                runningTaskJobs.remove(task.id)
+                cancelImageRequest(task.id)
             }
             delay(100)
         }
@@ -1147,20 +1197,14 @@ fun MainScreen(
                                     }
 
                                     activityTaskScope.launch {
-                                        val referenceBytes = selectedImage?.let { uri ->
-                                            isReadingReferenceImage = true
-                                            status = "正在读取参考图..."
-                                            withContext(Dispatchers.IO) {
-                                                runCatching { readReferenceImageBytes(context, uri) }
-                                            }.onFailure {
-                                                status = "参考图读取失败：${it.message ?: "未知错误"}"
-                                            }.getOrNull().also {
-                                                selectedImageBytes = it
-                                                isReadingReferenceImage = false
-                                            }
-                                        }
+                                        val referenceBytes = selectedImageBytes
 
                                         if (selectedImage != null && referenceBytes == null) {
+                                            status = if (isReadingReferenceImage) {
+                                                "参考图仍在读取中，请稍候。"
+                                            } else {
+                                                "参考图缓存不可用，请重新选择图片。"
+                                            }
                                             return@launch
                                         }
 
