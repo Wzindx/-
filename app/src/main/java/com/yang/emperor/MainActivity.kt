@@ -604,6 +604,14 @@ fun MainScreen(
                 runningTasks.remove(task.id)
                 runningTaskJobs.remove(task.id)
                 cancelImageRequest(task.id)
+                if (task.imageBytes != null) {
+                    selectedImage = null
+                    selectedImageBytes = null
+                    isReadingReferenceImage = false
+                    withContext(Dispatchers.IO) {
+                        clearReferenceImageCache(context)
+                    }
+                }
             }
             delay(100)
         }
